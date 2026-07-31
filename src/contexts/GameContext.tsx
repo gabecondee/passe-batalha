@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { getLevelInfo } from '@/lib/leveling';
 import { emit } from '@/lib/eventBus';
 import { XP_PER_ACTION, computeTotalReward, countOccurrences, toISODate, weekDayOf } from '@/lib/missionRewards';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const XP_PER_CLICK = 25;
 const XP_PER_LEVEL = 100; // XP por nível interno de uma habilidade (skill)
@@ -73,18 +75,49 @@ const attributeConfig: Record<AttributeType, { name: string; icon: string }> = {
 // Cálculo de níveis utiliza o sistema oficial em src/lib/leveling.ts.
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
+  const { user: authUser } = useAuth();
   const [skills, setSkills] = useState<Skill[]>(initialSkills);
-  const [missions, setMissions] = useState<Mission[]>(() => {
-    try {
-      const raw = localStorage.getItem('missions_v1');
-      if (raw) return JSON.parse(raw) as Mission[];
-    } catch { /* ignore */ }
-    return initialMissions;
-  });
+  const [missions, setMissions] = useState<Mission[]>([]);
 
   useEffect(() => {
-    try { localStorage.setItem('missions_v1', JSON.stringify(missions)); } catch { /* ignore */ }
-  }, [missions]);
+    const fetchMissions = async () => {
+      if (!authUser) {
+        setMissions([]);
+        return;
+      }
+      const { data, error } = await supabase
+        .from('missions')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        toast.error('Erro ao buscar missões: ' + error.message);
+        return;
+      }
+
+      if (data) {
+        const mappedMissions: Mission[] = data.map(m => ({
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          type: m.type as any,
+          attribute: m.attribute as any,
+          dailyAction: m.daily_action,
+          weekDays: m.week_days,
+          difficulty: m.difficulty,
+          xpReward: m.xp_reward,
+          progress: m.progress,
+          status: m.status as any,
+          lastDailyActionDate: m.last_daily_action_date,
+          completedDates: m.completed_dates || [],
+          deadline: m.deadline,
+          createdAt: m.created_at
+        }));
+        setMissions(mappedMissions);
+      }
+    };
+    fetchMissions();
+  }, [authUser]);
   const [attributeXpBonus, setAttributeXpBonus] = useState<Record<AttributeType, number>>(() => {
     // Level always starts at 1 after the first login; XP is earned only from actions.
     return { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
@@ -377,7 +410,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Mission actions
-  const createMission = useCallback((data: CreateMissionData) => {
+  const createMission = useCallback(async (data: CreateMissionData) => {
+    if (!authUser) {
+      toast.error('Você precisa estar logado para criar uma missão.');
+      return;
+    }
+
     const createdAt = new Date().toISOString();
     // Recompensa total = XP por ação (por dificuldade) × ocorrências até o prazo final.
     const totalReward = computeTotalReward(
@@ -387,28 +425,53 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       data.weekDays,
     );
 
+    const { data: insertedData, error } = await supabase
+      .from('missions')
+      .insert({
+        user_id: authUser.id,
+        name: data.name,
+        description: data.description,
+        type: data.type,
+        attribute: data.attribute,
+        daily_action: data.dailyAction,
+        week_days: data.weekDays,
+        difficulty: data.difficulty,
+        xp_reward: totalReward,
+        progress: 0,
+        status: 'active',
+        completed_dates: [],
+        deadline: data.deadline
+      })
+      .select()
+      .single();
+
+    if (error) {
+      toast.error('Erro ao criar missão no banco: ' + error.message);
+      return;
+    }
+
     const newMission: Mission = {
-      id: `m${Date.now()}`,
-      name: data.name,
-      description: data.description,
-      type: data.type,
-      attribute: data.attribute,
-      xpReward: totalReward,
-      difficulty: data.difficulty,
+      id: insertedData.id,
+      name: insertedData.name,
+      description: insertedData.description,
+      type: insertedData.type as any,
+      attribute: insertedData.attribute as any,
+      xpReward: insertedData.xp_reward,
+      difficulty: insertedData.difficulty,
       timeLimit: data.timeLimit,
-      dailyAction: data.dailyAction,
-      weekDays: data.weekDays,
-      deadline: data.deadline,
-      createdAt,
-      completedDates: [],
-      progress: 0,
-      status: 'active',
+      dailyAction: insertedData.daily_action,
+      weekDays: insertedData.week_days,
+      deadline: insertedData.deadline,
+      createdAt: insertedData.created_at,
+      completedDates: insertedData.completed_dates || [],
+      progress: insertedData.progress,
+      status: insertedData.status as any,
     };
 
     setMissions(prev => [newMission, ...prev]);
     emit({ type: 'mission:created', missionId: newMission.id });
     toast.success(`📜 Nova missão criada: ${data.name}`);
-  }, []);
+  }, [authUser]);
 
   const startMission = useCallback((id: string) => {
     setMissions(prev => prev.map(m =>
@@ -430,7 +493,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     ));
   }, []);
 
-  const completeDailyAction = useCallback((id: string) => {
+  const completeDailyAction = useCallback(async (id: string) => {
     const mission = missions.find(m => m.id === id);
     if (!mission || !mission.dailyAction) return;
     if (mission.status !== 'active' && mission.status !== 'in_progress') {
@@ -459,11 +522,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    const completedDates = [...(mission.completedDates ?? []), today];
+    
+    // DB UPDATE
+    const { error } = await supabase
+      .from('missions')
+      .update({
+        completed_dates: completedDates,
+        last_daily_action_date: today
+      })
+      .eq('id', id);
+      
+    if (error) {
+      toast.error('Erro ao atualizar missão no banco: ' + error.message);
+      return;
+    }
+
     const xp = XP_PER_ACTION[mission.difficulty] ?? 0;
 
     setMissions(prev => prev.map(m => {
       if (m.id !== id) return m;
-      const completedDates = [...(m.completedDates ?? []), today];
       return { ...m, completedDates, lastDailyActionDate: today };
     }));
 
@@ -479,7 +557,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, [missions]);
 
-  const deleteMission = useCallback((id: string) => {
+  const deleteMission = useCallback(async (id: string) => {
+    const { error } = await supabase.from('missions').delete().eq('id', id);
+    if (error) {
+      toast.error('Erro ao deletar missão no banco: ' + error.message);
+      return;
+    }
     setMissions(prev => prev.filter(m => m.id !== id));
     emit({ type: 'mission:deleted', missionId: id });
     toast.success('Missão removida');
