@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { emit } from '@/lib/eventBus';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
-const KEY = 'streak-reward-state-v1';
 const SYNC_EVENT = 'streak-reward:sync';
 
 export interface ShopPurchase {
@@ -56,48 +57,23 @@ export type StreakOutcome = {
   alreadyCheckedToday: boolean;
 };
 
-function loadState(): StreakRewardState {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) {
-      // First-time user: start with 0 fragments. Fragments are earned only through
-      // in-app mechanics (daily login, streak rewards, etc.), never seeded by onboarding.
-      const seeded: StreakRewardState = { ...DEFAULT_STATE };
-      try {
-        localStorage.setItem(KEY, JSON.stringify(seeded));
-      } catch { /* ignore */ }
-      return seeded;
-    }
-    const parsed = JSON.parse(raw);
-    return { ...DEFAULT_STATE, ...parsed };
-  } catch {
-    return { ...DEFAULT_STATE };
-  }
+function generateDummyHistory() {
+  return [];
 }
 
-function saveState(s: StreakRewardState) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(s));
-    window.dispatchEvent(new CustomEvent(SYNC_EVENT));
-  } catch {
-    /* ignore */
-  }
-}
-
-/** Utility for non-hook code paths that need to credit/spend fragments. */
 export function addFragments(amount: number, reason: string): number {
-  const current = loadState();
-  const next: StreakRewardState = {
-    ...current,
-    total_fragments: Math.max(0, current.total_fragments + amount),
-    fragment_history: [
-      ...current.fragment_history,
-      { date: new Date().toISOString().slice(0, 10), amount, reason },
-    ].slice(-200),
-  };
-  saveState(next);
-  emit({ type: 'fragments:changed', balance: next.total_fragments, delta: amount, reason });
-  return next.total_fragments;
+  supabase.auth.getUser().then(({ data: { user } }) => {
+    if (!user) return;
+    supabase.from('user_economy').select('*').eq('user_id', user.id).single().then(({ data }) => {
+      if (!data) return;
+      const newTotal = Math.max(0, (data.total_fragments || 0) + amount);
+      supabase.from('user_economy').update({ total_fragments: newTotal }).eq('user_id', user.id).then(() => {
+        emit({ type: 'fragments:changed', balance: newTotal, delta: amount, reason });
+        window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+      });
+    });
+  });
+  return 0;
 }
 
 function todayStr(): string {
@@ -111,21 +87,49 @@ function daysBetween(a: string, b: string): number {
 }
 
 export function useStreakReward() {
-  const [state, setState] = useState<StreakRewardState>(loadState);
+  const { user, isLoading: isAuthLoading } = useAuth();
+  const [state, setState] = useState<StreakRewardState>(DEFAULT_STATE);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Sync across hook instances (Shop, Inventory, Dashboard, Settings) whenever any writer updates state.
+  const fetchEconomy = useCallback(async () => {
+    if (isAuthLoading) return;
+    if (!user) {
+      setState(DEFAULT_STATE);
+      setIsLoading(false);
+      return;
+    }
+    const { data, error } = await supabase.from('user_economy').select('*').eq('user_id', user.id).single();
+    if (error || !data) {
+      // Fallback: se o usuário é novo e a trigger falhou/não existia
+      await supabase.from('user_economy').insert({ user_id: user.id });
+      setState(DEFAULT_STATE);
+      setIsLoading(false);
+    } else {
+      setState(prev => ({
+        ...prev,
+        streak_days: data.streak_days || 0,
+        best_streak: data.best_streak || 0,
+        total_fragments: data.total_fragments || 0,
+        streak_shields: data.streak_shields || 0,
+        last_checkin_date: data.last_checkin_date,
+      }));
+      setIsLoading(false);
+    }
+  }, [user, isAuthLoading]);
+
+  // Sync across hook instances
   useEffect(() => {
-    const sync = () => setState(loadState());
+    fetchEconomy();
+    const sync = () => fetchEconomy();
     window.addEventListener(SYNC_EVENT, sync);
-    window.addEventListener('storage', sync);
     return () => {
       window.removeEventListener(SYNC_EVENT, sync);
-      window.removeEventListener('storage', sync);
     };
-  }, []);
+  }, [fetchEconomy]);
+
   const checkIn = useCallback((): StreakOutcome => {
     const today = todayStr();
-    const current = loadState();
+    const current = state;
     const previousStreak = current.streak_days;
 
     // Already checked today → no rewards
@@ -219,9 +223,19 @@ export function useStreakReward() {
       shop_purchases: current.shop_purchases,
     };
 
-
-    saveState(next);
     setState(next);
+    
+    if (user) {
+      supabase.from('user_economy').update({
+        streak_days: next.streak_days,
+        best_streak: next.best_streak,
+        last_checkin_date: next.last_checkin_date,
+        total_fragments: next.total_fragments,
+        streak_shields: next.streak_shields
+      }).eq('user_id', user.id).then(() => {
+         window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+      });
+    }
 
     return {
       state: next,
@@ -233,7 +247,7 @@ export function useStreakReward() {
       totalReward,
       alreadyCheckedToday: false,
     };
-  }, []);
+  }, [state, user]);
 
   /** Restart after a broken streak — just acknowledge. State already reset by checkIn. */
   const acknowledgeRestart = useCallback(() => {
@@ -243,7 +257,7 @@ export function useStreakReward() {
   /** Purchase a shop item. Returns true on success, false if not enough fragments. */
   const purchase = useCallback(
     (item: { id: string; name: string; cost: number; shieldDays?: number }): boolean => {
-      const current = loadState();
+      const current = state;
       if (current.total_fragments < item.cost) return false;
       const next: StreakRewardState = {
         ...current,
@@ -254,12 +268,22 @@ export function useStreakReward() {
           { date: todayStr(), itemId: item.id, itemName: item.name, cost: item.cost },
         ].slice(-100),
       };
-      saveState(next);
+      
       setState(next);
+      
+      if (user) {
+        supabase.from('user_economy').update({
+          total_fragments: next.total_fragments,
+          streak_shields: next.streak_shields
+        }).eq('user_id', user.id).then(() => {
+          window.dispatchEvent(new CustomEvent(SYNC_EVENT));
+        });
+      }
+      
       return true;
     },
-    []
+    [state, user]
   );
 
-  return { state, checkIn, acknowledgeRestart, purchase };
+  return { state, checkIn, acknowledgeRestart, purchase, isLoading };
 }

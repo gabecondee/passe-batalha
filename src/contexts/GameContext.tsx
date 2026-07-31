@@ -80,11 +80,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [missions, setMissions] = useState<Mission[]>([]);
 
   useEffect(() => {
-    const fetchMissions = async () => {
+    const fetchData = async () => {
       if (!authUser) {
         setMissions([]);
         return;
       }
+      
+      // 1. Fetch Profile Progression
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial')
+        .eq('id', authUser.id)
+        .single();
+        
+      if (profile) {
+        setEnergyOverride(profile.energy ?? 100);
+        setAttributeXpBonus({
+          physical: profile.xp_physical ?? 0,
+          mental: profile.xp_mental ?? 0,
+          spiritual: profile.xp_spiritual ?? 0,
+          professional: profile.xp_professional ?? 0,
+          financial: profile.xp_financial ?? 0,
+        });
+      }
+
+      // 2. Fetch Missions
       const { data, error } = await supabase
         .from('missions')
         .select('*')
@@ -116,7 +136,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setMissions(mappedMissions);
       }
     };
-    fetchMissions();
+    fetchData();
   }, [authUser]);
   const [attributeXpBonus, setAttributeXpBonus] = useState<Record<AttributeType, number>>(() => {
     // Level always starts at 1 after the first login; XP is earned only from actions.
@@ -233,9 +253,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [skills, attributeXpBonus, attributeInitialXp]);
 
   // Calculate user stats — XP Geral = soma do XP das 5 áreas
-  const setEnergy = useCallback((energy: number) => {
-    setEnergyOverride(Math.max(0, Math.min(100, energy)));
-  }, []);
+  const setEnergy = useCallback(async (energy: number) => {
+    const newEnergy = Math.max(0, Math.min(100, energy));
+    setEnergyOverride(newEnergy);
+    
+    if (authUser) {
+      const { error } = await supabase.from('profiles').update({ energy: newEnergy }).eq('id', authUser.id);
+      if (error) {
+        console.error('Failed to update energy in DB:', error);
+      }
+    }
+  }, [authUser]);
 
   const user = useMemo<User>(() => {
     // "XP das Skills" (per area, displayed on the radar and inventory) includes the
@@ -493,6 +521,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     ));
   }, []);
 
+  /**
+   * Unified pipeline for awarding XP to a specific attribute.
+   * Credits directly into `attributeXpBonus`, which feeds the attribute radar
+   * and level, so it works regardless of whether the user has any unlocked
+   * skill in that area.
+   */
+  const addAttributeXp = useCallback((attribute: AttributeType, xp: number) => {
+    if (!xp || xp <= 0) return;
+    
+    setAttributeXpBonus(prev => {
+      const newTotal = (prev[attribute] ?? 0) + xp;
+      
+      if (authUser) {
+        // Fire and forget update
+        supabase.from('profiles').update({
+          [`xp_${attribute}`]: newTotal
+        }).eq('id', authUser.id).then(({ error }) => {
+          if (error) console.error('Failed to update xp in DB:', error);
+        });
+      }
+      
+      return {
+        ...prev,
+        [attribute]: newTotal,
+      };
+    });
+    
+    emit({ type: 'xp:gained', area: attribute, amount: xp, source: 'achievement' });
+  }, [authUser]);
+
   const completeDailyAction = useCallback(async (id: string) => {
     const mission = missions.find(m => m.id === id);
     if (!mission || !mission.dailyAction) return;
@@ -546,16 +604,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }));
 
     if (xp > 0) {
-      setAttributeXpBonus(prev => ({
-        ...prev,
-        [mission.attribute]: (prev[mission.attribute] ?? 0) + xp,
-      }));
-      emit({ type: 'xp:gained', area: mission.attribute, amount: xp, source: 'daily-action' });
+      addAttributeXp(mission.attribute, xp);
       toast.success(`✅ Ação diária concluída! +${xp} XP em ${mission.attribute}`);
     } else {
       toast.success('✅ Ação diária concluída!');
     }
-  }, [missions]);
+  }, [missions, addAttributeXp]);
 
   const deleteMission = useCallback(async (id: string) => {
     const { error } = await supabase.from('missions').delete().eq('id', id);
@@ -702,21 +756,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
 
     toast.success(`🏆 Recompensa aplicada: +${rewardXp} XP nas áreas: ${rewardAreas.join(', ')}`);
-  }, []);
-
-  /**
-   * Unified pipeline for awarding XP to a specific attribute.
-   * Credits directly into `attributeXpBonus`, which feeds the attribute radar
-   * and level, so it works regardless of whether the user has any unlocked
-   * skill in that area.
-   */
-  const addAttributeXp = useCallback((attribute: AttributeType, xp: number) => {
-    if (!xp || xp <= 0) return;
-    setAttributeXpBonus(prev => ({
-      ...prev,
-      [attribute]: (prev[attribute] ?? 0) + xp,
-    }));
-    emit({ type: 'xp:gained', area: attribute, amount: xp, source: 'achievement' });
   }, []);
 
   const value: GameContextType = {

@@ -90,15 +90,17 @@ export function EnergyCheckin() {
   const [step, setStep] = useState<'select' | 'result' | 'streak'>('select');
   const [streakOutcome, setStreakOutcome] = useState<StreakOutcome | null>(null);
   const { setEnergy } = useGame();
-  const { checkIn } = useStreakReward();
+  const { state: streakState, checkIn, isLoading } = useStreakReward();
 
   useEffect(() => {
-    const key = getTodayKey();
-    if (!localStorage.getItem(key)) {
+    if (isLoading) return;
+    
+    const today = new Date().toISOString().slice(0, 10);
+    if (streakState.last_checkin_date !== today) {
       const timer = setTimeout(() => setOpen(true), 800);
       return () => clearTimeout(timer);
     }
-  }, []);
+  }, [isLoading, streakState.last_checkin_date]);
 
   const handleConfirm = () => {
     if (selected === null) return;
@@ -108,7 +110,6 @@ export function EnergyCheckin() {
   };
 
   const handleGoToStreak = () => {
-    localStorage.setItem(getTodayKey(), String(selected ?? -1));
     const outcome = checkIn();
     setStreakOutcome(outcome);
     setStep('streak');
