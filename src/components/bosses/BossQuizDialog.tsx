@@ -136,85 +136,85 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
   const generateBoss = async (finalScores: Record<string, 1 | 2 | 3 | 4>) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('generate-boss', {
-        body: {
-          problem: problem.trim(),
-          timeScore: finalScores.time,
-          frequencyScore: finalScores.frequency,
-          impactScore: finalScores.impact,
-          attemptsScore: finalScores.attempts,
-        },
-      });
-
-      if (error) throw error;
-      if (!data?.boss) throw new Error('Resposta incompleta da IA.');
-
-      const { boss: b, difficulty, rewards, portraitDataUrl } = data as {
-        boss: any;
-        difficulty: BossDifficulty;
-        rewards: { xp: number; penalty: number; maxFails: number };
-        portraitDataUrl: string | null;
+      // Simula um tempo de "geração" para efeito visual
+      await new Promise(r => setTimeout(r, 2500));
+      
+      const total = finalScores.time + finalScores.frequency + finalScores.impact + finalScores.attempts;
+      
+      const classify = (t: number): BossDifficulty => {
+        if (t <= 5) return "common";
+        if (t <= 8) return "uncommon";
+        if (t <= 11) return "rare";
+        if (t <= 14) return "epic";
+        return "legendary";
       };
-
-      const id = `boss-custom-${Date.now()}`;
-      const DIFFICULTY_MAX_FAILS: Record<BossDifficulty, number> = {
-        legendary: 1, epic: 3, rare: 5, uncommon: 7, common: 10,
+      
+      const difficulty = classify(total);
+      
+      const REWARDS: Record<BossDifficulty, { xp: number; penalty: number; maxFails: number }> = {
+        common: { xp: 50, penalty: 50, maxFails: 10 },
+        uncommon: { xp: 300, penalty: 100, maxFails: 7 },
+        rare: { xp: 600, penalty: 200, maxFails: 5 },
+        epic: { xp: 1100, penalty: 350, maxFails: 3 },
+        legendary: { xp: 1500, penalty: 500, maxFails: 1 },
       };
-      const maxFails = DIFFICULTY_MAX_FAILS[difficulty] ?? rewards.maxFails;
+      
+      const rewards = REWARDS[difficulty];
 
-      // Detecta a segunda área impactada com base no problema
       const detectSecondaryArea = (text: string): string => {
         const t = text.toLowerCase();
-        const rules: { re: RegExp; area: string }[] = [
+        const rules = [
           { re: /(d[íi]vid|financ|dinheiro|gasto|compra|investir|cr[ée]dito|econom|sal[áa]rio)/, area: 'Financeiro' },
           { re: /(sedentar|preguic|exerc|academ|corri|aliment|comida|dieta|junk|fum|cigarr|[áa]lcool|bebid|drog|sono|dormir|obesid|corpo|sa[úu]de)/, area: 'Físico' },
           { re: /(procrast|trabalh|estud|foco|distra|redes.?soci|instagram|tiktok|youtube|netflix|jogo|game|celular|produtiv|carreir|profission)/, area: 'Profissional' },
-          { re: /(porn|masturb|lux[úu]ri|ansied|depress|medo|raiva|ego|espirit|orgul|inveja|solid|vazi|prop[óo]sito|f[ée]|medita|culpa|v[íi]cio\s+emocional)/, area: 'Espiritual' },
         ];
         for (const r of rules) if (r.re.test(t)) return r.area;
         return 'Espiritual';
       };
-      const secondaryArea = (b.secondaryArea && ['Físico','Financeiro','Profissional','Espiritual'].includes(b.secondaryArea))
-        ? b.secondaryArea
-        : detectSecondaryArea(problem);
-
-      // Garante formato "Nome - Subtítulo"
-      const rawName: string = String(b.name || '').trim();
-      const shortName: string = (b.shortName || '').toString().trim();
-      let formattedName = rawName;
-      if (shortName && !rawName.toLowerCase().startsWith(shortName.toLowerCase())) {
-        formattedName = `${shortName} - ${rawName}`;
-      } else if (shortName && rawName.toLowerCase() === shortName.toLowerCase()) {
-        formattedName = shortName;
-      } else if (!/\s[-–:]\s/.test(rawName)) {
-        // Se veio sem separador com espaço, tenta normalizar o primeiro "-" ou ":"
-        formattedName = rawName.replace(/\s*[-–:]\s*/, ' - ');
-      }
+      
+      const secondaryArea = detectSecondaryArea(problem);
+      
+      const id = `boss-custom-${Date.now()}`;
+      const capName = problem.trim().toUpperCase();
+      const formattedName = `${capName} - A Sombra do Hábito`;
 
       const newBoss: Boss = {
         id,
         name: formattedName,
-        class: b.class || problem.trim(),
+        class: problem.trim(),
         vice: problem.trim(),
         difficulty,
         defeated: false,
         xpReward: rewards.xp,
-        portrait: portraitDataUrl || undefined,
-        description: b.description,
-        origin: b.origin,
-        abilities: b.abilities,
-        weaknesses: b.weaknesses,
+        portrait: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(problem)}&colors=red,orange,yellow&backgroundColor=111111`,
+        description: `Um chefão forjado a partir do seu desafio constante com ${problem.trim()}. Ele se alimenta da sua hesitação e da perda de foco. Esta é a manifestação mental do obstáculo que você deve superar.`,
+        origin: `Nascido dos padrões repetitivos e gatilhos relacionados a ${problem.trim()}.`,
+        abilities: [
+          { name: "Golpe da Tentação", description: "Tenta induzir uma recaída imediata e impensada." },
+          { name: "Neblina Mental", description: "Reduz a clareza sobre seus objetivos de longo prazo." },
+          { name: "Fadiga Ilusória", description: "Faz você acreditar que está cansado demais para tentar." },
+          { name: "Racionalização", description: "Cria desculpas perfeitas para justificar a manutenção do problema." }
+        ],
+        weaknesses: [
+          { name: "Consciência Ativa", description: "Monitorar o gatilho quebra a furtividade do chefe." },
+          { name: "Ação Imediata", description: "Tomar uma decisão contrária nos primeiros 5 segundos." },
+          { name: "Substituição", description: "Trocar o hábito ruim por um bom anula o ataque." },
+          { name: "Constância", description: "Cada dia vencido tira camadas de armadura do boss." }
+        ],
         rules: {
           penaltyAreas: ['Mental', secondaryArea],
           penaltyPoints: rewards.penalty,
           rewardXp: rewards.xp,
           rewardAreas: ['Mental', secondaryArea],
-          maxFails,
+          maxFails: rewards.maxFails,
         },
         durationDays: 30,
-        dailyTasks: (b.campaign as Array<{ day: number; action: string; attackName?: string }>).map(d => ({
-          day: d.day,
-          action: d.attackName ? `${d.attackName}: ${d.action}` : d.action,
+        dailyTasks: Array.from({ length: 30 }).map((_, i) => ({
+          day: i + 1,
+          action: i < 7 ? `Ataque Base: Monitorar o padrão e registrar o gatilho do problema.` : 
+                 i < 14 ? `Defesa: Evitar o principal gatilho do dia.` :
+                 i < 21 ? `Contra-Ataque: Aplicar a rotina de substituição com sucesso.` :
+                 `Golpe Final: Reforçar o novo comportamento de sucesso.`,
         })),
       };
 

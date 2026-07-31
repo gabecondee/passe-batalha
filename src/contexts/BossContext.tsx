@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
 import { Boss } from '@/types/boss';
 import { mockBosses } from '@/data/bossData';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type BattleStatus = 'idle' | 'active' | 'won' | 'lost';
 
@@ -82,16 +84,80 @@ const defaultBattle = (bossId: string): BossBattle => ({
 });
 
 export function BossProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [bosses, setBosses] = useState<Boss[]>(mockBosses);
   const [battles, setBattles] = useState<Record<string, BossBattle>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchData = async () => {
+      const [bossesRes, battlesRes] = await Promise.all([
+        supabase.from('custom_bosses').select('*').eq('user_id', user.id),
+        supabase.from('boss_battles').select('*').eq('user_id', user.id)
+      ]);
+      
+      if (bossesRes.data) {
+        const customBosses: Boss[] = bossesRes.data.map(d => ({
+          id: d.id,
+          name: d.name,
+          description: d.description,
+          vice: d.vice,
+          difficulty: d.difficulty as any,
+          xpReward: d.xp_reward,
+          durationDays: d.duration_days,
+          rules: d.rules,
+          dailyTasks: []
+        }));
+        setBosses([...customBosses, ...mockBosses]);
+      }
+      
+      if (battlesRes.data) {
+        const hydratedBattles: Record<string, BossBattle> = {};
+        const sorted = battlesRes.data.sort((a, b) => 
+          new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+        );
+        for (const b of sorted) {
+          const days = (b.days_history as BattleDay[]) || [];
+          hydratedBattles[b.boss_id] = {
+            bossId: b.boss_id,
+            status: b.status as BattleStatus,
+            startedAt: b.started_at,
+            durationDays: b.duration_days,
+            days,
+            wins: b.status === 'won' ? 1 : 0,
+            losses: b.status === 'lost' ? 1 : 0,
+            currentDay: days.filter(d => d.status !== 'pending').length + 1 || 1,
+            rewardsProcessed: b.status === 'won' || b.status === 'lost'
+          };
+        }
+        setBattles(hydratedBattles);
+      }
+    };
+    
+    fetchData();
+  }, [user]);
 
   const getBattle = useCallback((bossId: string): BossBattle => {
     return battles[bossId] || defaultBattle(bossId);
   }, [battles]);
 
-  const addBoss = useCallback((boss: Boss) => {
+  const addBoss = useCallback(async (boss: Boss) => {
     setBosses(prev => (prev.some(b => b.id === boss.id) ? prev : [boss, ...prev]));
-  }, []);
+    if (user) {
+      await supabase.from('custom_bosses').insert({
+        id: boss.id,
+        user_id: user.id,
+        name: boss.name,
+        description: boss.description,
+        vice: boss.vice,
+        difficulty: boss.difficulty,
+        xp_reward: boss.xpReward,
+        duration_days: boss.durationDays,
+        rules: boss.rules
+      });
+    }
+  }, [user]);
 
   const hasActiveBattle = useCallback(() => {
     return Object.values(battles).some(b => b.status === 'active');
@@ -112,24 +178,33 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     }
 
     const duration = durationDays ?? boss.durationDays ?? 30;
+    const newBattle: BossBattle = {
+      bossId,
+      status: 'active',
+      startedAt: new Date().toISOString(),
+      days: generateDayActions(boss, duration),
+      durationDays: duration,
+      currentDay: 1,
+      rewardsProcessed: false,
+      wins: 0,
+      losses: 0
+    };
 
-    setBattles(prev => {
-      const existing = prev[bossId] || defaultBattle(bossId);
-      return {
-        ...prev,
-        [bossId]: {
-          ...existing,
-          status: 'active',
-          startedAt: new Date().toISOString(),
-          days: generateDayActions(boss, duration),
-          durationDays: duration,
-          currentDay: 1,
-          rewardsProcessed: false,
-        },
-      };
-    });
+    setBattles(prev => ({ ...prev, [bossId]: newBattle }));
+
+    if (user) {
+      supabase.from('boss_battles').insert({
+        user_id: user.id,
+        boss_id: bossId,
+        status: 'active',
+        started_at: newBattle.startedAt,
+        duration_days: duration,
+        days_history: newBattle.days
+      });
+    }
+
     toast.success('⚔️ Batalha iniciada! Boa sorte, guerreiro!');
-  }, [battles, bosses]);
+  }, [battles, bosses, user]);
 
 
   const recordDayAction = useCallback((bossId: string, day: number, success: boolean) => {
@@ -179,12 +254,25 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         toast.warning('😤 Falha registrada. Não desista!');
       }
 
+      const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
+      
+      if (user) {
+        supabase.from('boss_battles')
+          .update({
+            days_history: newDays,
+            status: newStatus
+          })
+          .eq('user_id', user.id)
+          .eq('boss_id', bossId)
+          .eq('status', 'active').then();
+      }
+
       return {
         ...prev,
-        [bossId]: { ...battle, days: newDays, status: newStatus, wins, losses, currentDay },
+        [bossId]: nextBattle,
       };
     });
-  }, [bosses]);
+  }, [bosses, user]);
 
 
   const getProgress = useCallback((bossId: string): number => {
@@ -221,12 +309,20 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const battle = prev[bossId];
       if (!battle || battle.status !== 'active') return prev;
       toast.error('💀 Batalha abandonada. Registrada como derrota.');
-      return {
-        ...prev,
-        [bossId]: { ...battle, status: 'lost', losses: battle.losses + 1 },
-      };
+      
+      const nextBattle = { ...battle, status: 'lost' as BattleStatus, losses: battle.losses + 1 };
+      
+      if (user) {
+        supabase.from('boss_battles')
+          .update({ status: 'lost' })
+          .eq('user_id', user.id)
+          .eq('boss_id', bossId)
+          .eq('status', 'active').then();
+      }
+      
+      return { ...prev, [bossId]: nextBattle };
     });
-  }, []);
+  }, [user]);
 
   const markRewardsProcessed = useCallback((bossId: string) => {
     setBattles(prev => {
@@ -247,8 +343,13 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       delete next[bossId];
       return next;
     });
+    
+    if (user) {
+      supabase.from('custom_bosses').delete().eq('id', bossId).eq('user_id', user.id).then();
+    }
+    
     toast.success('Chefão excluído.');
-  }, []);
+  }, [user]);
 
   const value = useMemo(() => ({
     bosses,
