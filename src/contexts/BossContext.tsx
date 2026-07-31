@@ -101,13 +101,18 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         const customBosses: Boss[] = bossesRes.data.map(d => ({
           id: d.id,
           name: d.name,
+          class: d.class,
+          portrait: d.portrait,
           description: d.description,
+          origin: d.origin,
           vice: d.vice,
           difficulty: d.difficulty as any,
           xpReward: d.xp_reward,
           durationDays: d.duration_days,
           rules: d.rules,
-          dailyTasks: []
+          abilities: d.abilities,
+          weaknesses: d.weaknesses,
+          dailyTasks: d.daily_tasks || []
         }));
         setBosses([...customBosses, ...mockBosses]);
       }
@@ -149,12 +154,23 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         id: boss.id,
         user_id: user.id,
         name: boss.name,
+        class: boss.class,
+        portrait: boss.portrait,
         description: boss.description,
+        origin: boss.origin,
         vice: boss.vice,
         difficulty: boss.difficulty,
         xp_reward: boss.xpReward,
         duration_days: boss.durationDays,
-        rules: boss.rules
+        rules: boss.rules,
+        abilities: boss.abilities,
+        weaknesses: boss.weaknesses,
+        daily_tasks: boss.dailyTasks
+      }).then(({ error }) => {
+        if (error) {
+          console.error("Erro CRÍTICO ao inserir custom_bosses:", error);
+          toast.error(`Falha no Banco de Dados: ${error.message}`);
+        }
       });
     }
   }, [user]);
@@ -200,6 +216,8 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         started_at: newBattle.startedAt,
         duration_days: duration,
         days_history: newBattle.days
+      }).then(({ error }) => {
+        if (error) console.error("Erro ao inserir boss_battles:", error);
       });
     }
 
