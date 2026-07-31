@@ -3,11 +3,11 @@ import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { useGame } from '@/contexts/GameContext';
 
 const Index = () => {
-  const { hasCompletedOnboarding, completeOnboarding } = useGame();
-
-  if (!hasCompletedOnboarding) {
-    return <OnboardingWizard onComplete={completeOnboarding} />;
-  }
+  // Desativado temporariamente a pedido do usuário
+  // const { hasCompletedOnboarding, completeOnboarding } = useGame();
+  // if (!hasCompletedOnboarding) {
+  //   return <OnboardingWizard onComplete={completeOnboarding} />;
+  // }
 
   return <Dashboard />;
 };
