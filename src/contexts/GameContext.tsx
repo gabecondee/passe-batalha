@@ -1,0 +1,679 @@
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Skill, Attribute, User, AttributeType, Mission, MissionStatus, WeekDay } from '@/types/game';
+import { skills as initialSkills, missions as initialMissions, currentUser as initialUser } from '@/data/mockData';
+import { toast } from 'sonner';
+import { getLevelInfo } from '@/lib/leveling';
+import { emit } from '@/lib/eventBus';
+import { XP_PER_ACTION, computeTotalReward, countOccurrences, toISODate, weekDayOf } from '@/lib/missionRewards';
+
+const XP_PER_CLICK = 25;
+const XP_PER_LEVEL = 100; // XP por nível interno de uma habilidade (skill)
+
+interface GameContextType {
+  // User
+  user: User;
+  updateAvatar: (avatarUrl: string) => void;
+  setEnergy: (energy: number) => void;
+  
+  // Onboarding
+  hasCompletedOnboarding: boolean;
+  completeOnboarding: (data: { name: string; avatar: string | null }) => void;
+  
+  // Level Up
+  levelUpData: { level: number; show: boolean };
+  dismissLevelUp: () => void;
+  
+  // Skills
+  skills: Skill[];
+  addXpToSkill: (skillId: string) => void;
+  removeXpFromSkill: (skillId: string) => void;
+  unlockSkill: (skillId: string) => void;
+  addSkill: (skill: { name: string; description: string; icon: string; attribute: AttributeType }) => void;
+  resetSkills: () => void;
+  applyBossPenalty: (penaltyAreas: string[], penaltyPoints: number) => void;
+  applyBossReward: (rewardAreas: string[], rewardXp: number) => void;
+  addAttributeXp: (attribute: AttributeType, xp: number) => void;
+  
+  // Attributes (calculated from skills)
+  attributes: Attribute[];
+  
+  // Missions
+  missions: Mission[];
+  createMission: (data: CreateMissionData) => void;
+  startMission: (id: string) => void;
+  updateProgress: (id: string, progress: number) => void;
+  completeMission: (id: string) => void;
+  completeDailyAction: (id: string) => void;
+  deleteMission: (id: string) => void;
+}
+
+interface CreateMissionData {
+  name: string;
+  description: string;
+  type: 'main' | 'secondary' | 'daily' | 'boss';
+  attribute: AttributeType;
+  xpReward: number;
+  difficulty: number;
+  timeLimit?: string;
+  dailyAction?: string;
+  weekDays?: WeekDay[];
+  deadline?: string;
+}
+
+const GameContext = createContext<GameContextType | undefined>(undefined);
+
+const attributeConfig: Record<AttributeType, { name: string; icon: string }> = {
+  physical: { name: 'Físico', icon: '💪' },
+  mental: { name: 'Mental', icon: '🧠' },
+  spiritual: { name: 'Espiritual', icon: '✨' },
+  professional: { name: 'Profissional', icon: '💼' },
+  financial: { name: 'Financeiro', icon: '💰' },
+};
+
+// Cálculo de níveis utiliza o sistema oficial em src/lib/leveling.ts.
+
+export function GameProvider({ children }: { children: React.ReactNode }) {
+  const [skills, setSkills] = useState<Skill[]>(initialSkills);
+  const [missions, setMissions] = useState<Mission[]>(() => {
+    try {
+      const raw = localStorage.getItem('missions_v1');
+      if (raw) return JSON.parse(raw) as Mission[];
+    } catch { /* ignore */ }
+    return initialMissions;
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('missions_v1', JSON.stringify(missions)); } catch { /* ignore */ }
+  }, [missions]);
+  const [attributeXpBonus, setAttributeXpBonus] = useState<Record<AttributeType, number>>(() => {
+    // Level always starts at 1 after the first login; XP is earned only from actions.
+    return { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
+  });
+  // XP baseline chosen during onboarding — displayed in the XP total and per-area totals,
+  // but excluded from level calculation so the user always starts at level 1.
+  const [attributeInitialXp, setAttributeInitialXp] = useState<Record<AttributeType, number>>(() => {
+    try {
+      const raw = localStorage.getItem('initial_skills');
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<Record<AttributeType, number>>;
+        return {
+          physical: Math.max(0, Number(parsed.physical) || 0),
+          mental: Math.max(0, Number(parsed.mental) || 0),
+          spiritual: Math.max(0, Number(parsed.spiritual) || 0),
+          professional: Math.max(0, Number(parsed.professional) || 0),
+          financial: Math.max(0, Number(parsed.financial) || 0),
+        };
+      }
+    } catch { /* ignore */ }
+    return { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
+  });
+
+  const [energyOverride, setEnergyOverride] = useState<number | null>(null);
+  const [customAvatar, setCustomAvatar] = useState<string | null>(() => {
+    return localStorage.getItem('user_avatar');
+  });
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
+    return localStorage.getItem('onboarding_completed') === 'true';
+  });
+  const [customName, setCustomName] = useState<string | null>(() => {
+    return localStorage.getItem('user_name');
+  });
+  const [levelUpData, setLevelUpData] = useState<{ level: number; show: boolean }>({ level: 1, show: false });
+  const [lastKnownLevel, setLastKnownLevel] = useState<number | null>(null);
+
+  const updateAvatar = useCallback((avatarUrl: string) => {
+    setCustomAvatar(avatarUrl);
+    localStorage.setItem('user_avatar', avatarUrl);
+    toast.success('🖼️ Avatar atualizado!');
+  }, []);
+
+  const completeOnboarding = useCallback((data: { name: string; avatar: string | null }) => {
+    // Seed initial XP baseline from onboarding choices (counts toward XP total but not level).
+    setAttributeInitialXp({
+      physical: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).physical) || 0),
+      mental: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).mental) || 0),
+      spiritual: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).spiritual) || 0),
+      professional: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).professional) || 0),
+      financial: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).financial) || 0),
+    });
+    // Reset earned bonus so level starts at 1.
+    setAttributeXpBonus({ physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 });
+
+    setCustomName(data.name);
+    if (data.avatar) setCustomAvatar(data.avatar);
+    setHasCompletedOnboarding(true);
+    localStorage.setItem('onboarding_completed', 'true');
+    localStorage.setItem('user_name', data.name);
+    if (data.avatar) localStorage.setItem('user_avatar', data.avatar);
+
+    // Do NOT seed a check-in on onboarding completion — the first daily login
+    // check-in must grant the +10 Fragments bonus (streak_days = 1). We only
+    // ensure the state file exists with 0 fragments and no last check-in date,
+    // preserving any prior shields/purchases if present.
+    try {
+      const STREAK_KEY = 'streak-reward-state-v1';
+      const raw = localStorage.getItem(STREAK_KEY);
+      const current = raw ? JSON.parse(raw) : {};
+      const seeded = {
+        streak_days: 0,
+        best_streak: current.best_streak ?? 0,
+        last_checkin_date: null,
+        total_fragments: 0,
+        last_bonus_claimed: 0,
+        total_streaks_completed: current.total_streaks_completed ?? 0,
+        fragment_history: [],
+        streak_shields: current.streak_shields ?? 0,
+        shop_purchases: current.shop_purchases ?? [],
+      };
+      localStorage.setItem(STREAK_KEY, JSON.stringify(seeded));
+      window.dispatchEvent(new CustomEvent('streak-reward:sync'));
+    } catch { /* ignore */ }
+
+    toast.success(`⚔️ Bem-vindo, ${data.name}! Sua jornada começou!`);
+  }, []);
+
+
+  // Calculate attributes from skills (sistema oficial de níveis)
+  // attribute.xp includes onboarding baseline (for hover tooltip / area totals),
+  // but attribute-level and user-level are calculated only from XP earned after onboarding.
+  const attributes = useMemo<Attribute[]>(() => {
+    const attributeTypes: AttributeType[] = ['physical', 'mental', 'spiritual', 'professional', 'financial'];
+
+    return attributeTypes.map(type => {
+      const skillsOfType = skills.filter(s => s.attribute === type && s.unlocked);
+      const skillXp = skillsOfType.reduce((sum, skill) => sum + skill.xp, 0);
+      const earnedXp = skillXp + (attributeXpBonus[type] ?? 0);
+      const baseline = attributeInitialXp[type] ?? 0;
+      const displayedXp = earnedXp + baseline;
+      const info = getLevelInfo(earnedXp);
+
+      return {
+        type,
+        name: attributeConfig[type].name,
+        icon: attributeConfig[type].icon,
+        xp: displayedXp,
+        level: info.level,
+        currentXP: info.currentXP,
+        xpToNextLevel: info.xpToNextLevel,
+      };
+    });
+  }, [skills, attributeXpBonus, attributeInitialXp]);
+
+  // Calculate user stats — XP Geral = soma do XP das 5 áreas
+  const setEnergy = useCallback((energy: number) => {
+    setEnergyOverride(Math.max(0, Math.min(100, energy)));
+  }, []);
+
+  const user = useMemo<User>(() => {
+    // "XP das Skills" (per area, displayed on the radar and inventory) includes the
+    // onboarding baseline. "XP de Progressão" (character level / XP bar) is completely
+    // independent — it starts at 0 after onboarding and only grows from in-app actions.
+    const earnedTotalXP = attributes.reduce(
+      (sum, attr) => sum + Math.max(0, attr.xp - (attributeInitialXp[attr.type] ?? 0)),
+      0,
+    );
+    // XP Total exibida na Home = soma das cinco áreas (inclui baseline do onboarding).
+    const displayedTotalXP = attributes.reduce((sum, attr) => sum + attr.xp, 0);
+    const info = getLevelInfo(earnedTotalXP);
+    const level = info.level;
+
+    let title = 'Iniciante';
+    if (level >= 50) title = 'Lenda Viva';
+    else if (level >= 40) title = 'Mestre Supremo';
+    else if (level >= 30) title = 'Grande Mestre';
+    else if (level >= 20) title = 'Guerreiro Épico';
+    else if (level >= 15) title = 'Aventureiro Determinado';
+    else if (level >= 10) title = 'Explorador Corajoso';
+    else if (level >= 5) title = 'Aprendiz Dedicado';
+
+    const userName = customName || initialUser.name;
+    return {
+      ...initialUser,
+      name: userName,
+      level,
+      totalXP: displayedTotalXP,
+      currentXP: info.currentXP,
+      xpToNextLevel: info.xpToNextLevel,
+      title,
+      ...(energyOverride !== null ? { energy: energyOverride } : {}),
+    };
+  }, [attributes, attributeInitialXp, customName, energyOverride]);
+
+
+  // Detect level-up by comparing to last known level
+  const prevLevelRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (prevLevelRef.current === null) {
+      prevLevelRef.current = user.level;
+      return;
+    }
+    if (user.level > prevLevelRef.current) {
+      setLevelUpData({ level: user.level, show: true });
+    }
+    prevLevelRef.current = user.level;
+  }, [user.level]);
+
+  const dismissLevelUp = useCallback(() => {
+    setLevelUpData(prev => ({ ...prev, show: false }));
+  }, []);
+
+  // Skill actions
+
+  const canAddXpToday = useCallback((lastXpAdded?: string): boolean => {
+    if (!lastXpAdded) return true;
+    
+    const lastDate = new Date(lastXpAdded);
+    const today = new Date();
+    
+    // Compare dates (ignore time)
+    return lastDate.toDateString() !== today.toDateString();
+  }, []);
+
+  // Skill actions
+  const addXpToSkill = useCallback((skillId: string) => {
+    setSkills(prevSkills => 
+      prevSkills.map(skill => {
+        if (skill.id !== skillId) return skill;
+        if (!skill.unlocked) return skill;
+        if (skill.level >= skill.maxLevel) {
+          toast.info(`${skill.name} já está no nível máximo!`);
+          return skill;
+        }
+
+        // Check daily limit
+        if (!canAddXpToday(skill.lastXpAdded)) {
+          toast.warning(`⏰ ${skill.name} já recebeu XP hoje! Volte amanhã.`);
+          return skill;
+        }
+
+        const newXp = skill.xp + XP_PER_CLICK;
+        const xpForNextLevel = (skill.level + 1) * XP_PER_LEVEL;
+        
+        if (newXp >= xpForNextLevel && skill.level < skill.maxLevel) {
+          const newLevel = skill.level + 1;
+          toast.success(`🎉 ${skill.name} subiu para o nível ${newLevel}!`);
+          return { ...skill, xp: newXp, level: newLevel, lastXpAdded: new Date().toISOString() };
+        }
+
+        toast.success(`+${XP_PER_CLICK} XP em ${skill.name}!`);
+        return { ...skill, xp: newXp, lastXpAdded: new Date().toISOString() };
+      })
+    );
+  }, [canAddXpToday]);
+
+  const removeXpFromSkill = useCallback((skillId: string) => {
+    setSkills(prevSkills => 
+      prevSkills.map(skill => {
+        if (skill.id !== skillId) return skill;
+        if (!skill.unlocked) return skill;
+        
+        const minXp = XP_PER_LEVEL;
+        
+        if (skill.xp <= minXp && skill.level <= 1) {
+          toast.info(`${skill.name} está no XP mínimo`);
+          return skill;
+        }
+        
+        const newXp = Math.max(minXp, skill.xp - XP_PER_CLICK);
+        const xpForCurrentLevel = skill.level * XP_PER_LEVEL;
+        
+        if (newXp < xpForCurrentLevel && skill.level > 1) {
+          const newLevel = skill.level - 1;
+          toast.warning(`${skill.name} voltou para o nível ${newLevel}`);
+          return { ...skill, xp: newXp, level: newLevel };
+        }
+
+        toast.success(`-${XP_PER_CLICK} XP em ${skill.name}`);
+        return { ...skill, xp: newXp };
+      })
+    );
+  }, []);
+
+  const unlockSkill = useCallback((skillId: string) => {
+    setSkills(prevSkills =>
+      prevSkills.map(skill => {
+        if (skill.id !== skillId) return skill;
+        if (skill.unlocked) return skill;
+        
+        toast.success(`🔓 ${skill.name} foi desbloqueada!`);
+        return { ...skill, unlocked: true, level: 1, xp: XP_PER_LEVEL };
+      })
+    );
+  }, []);
+
+  const addSkill = useCallback((newSkill: {
+    name: string;
+    description: string;
+    icon: string;
+    attribute: AttributeType;
+  }) => {
+    const id = `skill-${Date.now()}`;
+    const skill: Skill = {
+      id,
+      name: newSkill.name,
+      attribute: newSkill.attribute,
+      xp: 0,
+      level: 0,
+      maxLevel: 10,
+      unlocked: false,
+      description: newSkill.description,
+      icon: newSkill.icon,
+    };
+
+    setSkills(prevSkills => [...prevSkills, skill]);
+    toast.success(`✨ ${newSkill.name} foi adicionada à árvore!`);
+  }, []);
+
+  const resetSkills = useCallback(() => {
+    setSkills(prevSkills =>
+      prevSkills.map(skill => ({
+        ...skill,
+        xp: skill.unlocked ? XP_PER_LEVEL : 0,
+        level: skill.unlocked ? 1 : 0,
+        lastXpAdded: undefined,
+      }))
+    );
+    toast.success('🔄 Todas as habilidades foram resetadas!');
+  }, []);
+
+  // Mission actions
+  const createMission = useCallback((data: CreateMissionData) => {
+    const createdAt = new Date().toISOString();
+    // Recompensa total = XP por ação (por dificuldade) × ocorrências até o prazo final.
+    const totalReward = computeTotalReward(
+      data.difficulty,
+      createdAt,
+      data.deadline,
+      data.weekDays,
+    );
+
+    const newMission: Mission = {
+      id: `m${Date.now()}`,
+      name: data.name,
+      description: data.description,
+      type: data.type,
+      attribute: data.attribute,
+      xpReward: totalReward,
+      difficulty: data.difficulty,
+      timeLimit: data.timeLimit,
+      dailyAction: data.dailyAction,
+      weekDays: data.weekDays,
+      deadline: data.deadline,
+      createdAt,
+      completedDates: [],
+      progress: 0,
+      status: 'active',
+    };
+
+    setMissions(prev => [newMission, ...prev]);
+    emit({ type: 'mission:created', missionId: newMission.id });
+    toast.success(`📜 Nova missão criada: ${data.name}`);
+  }, []);
+
+  const startMission = useCallback((id: string) => {
+    setMissions(prev => prev.map(m =>
+      m.id === id ? { ...m, status: 'in_progress' as MissionStatus } : m
+    ));
+  }, []);
+
+  const updateProgress = useCallback((id: string, progress: number) => {
+    setMissions(prev => prev.map(m =>
+      m.id === id ? { ...m, progress: Math.min(100, Math.max(0, progress)) } : m
+    ));
+  }, []);
+
+  // Kept for backward compatibility with other UI (agenda etc.), but manual completion
+  // is no longer part of the mission mechanic — status is decided at the deadline.
+  const completeMission = useCallback((id: string) => {
+    setMissions(prev => prev.map(m =>
+      m.id === id ? { ...m, status: 'completed' as MissionStatus, progress: 100 } : m
+    ));
+  }, []);
+
+  const completeDailyAction = useCallback((id: string) => {
+    const mission = missions.find(m => m.id === id);
+    if (!mission || !mission.dailyAction) return;
+    if (mission.status !== 'active' && mission.status !== 'in_progress') {
+      toast.info('Esta missão não está mais ativa.');
+      return;
+    }
+    const now = new Date();
+    const today = toISODate(now);
+
+    // Só é permitido concluir a ação no próprio dia previsto pela frequência.
+    if (mission.weekDays && mission.weekDays.length > 0 && !mission.weekDays.includes(weekDayOf(now))) {
+      toast.info('Hoje não faz parte da frequência desta missão.');
+      return;
+    }
+    if (mission.deadline) {
+      const dl = new Date(mission.deadline);
+      dl.setHours(23, 59, 59, 999);
+      if (now > dl) {
+        toast.info('O prazo desta missão já terminou.');
+        return;
+      }
+    }
+    const already = (mission.completedDates ?? []).includes(today);
+    if (already) {
+      toast.info('Ação diária já concluída hoje.');
+      return;
+    }
+
+    const xp = XP_PER_ACTION[mission.difficulty] ?? 0;
+
+    setMissions(prev => prev.map(m => {
+      if (m.id !== id) return m;
+      const completedDates = [...(m.completedDates ?? []), today];
+      return { ...m, completedDates, lastDailyActionDate: today };
+    }));
+
+    if (xp > 0) {
+      setAttributeXpBonus(prev => ({
+        ...prev,
+        [mission.attribute]: (prev[mission.attribute] ?? 0) + xp,
+      }));
+      emit({ type: 'xp:gained', area: mission.attribute, amount: xp, source: 'daily-action' });
+      toast.success(`✅ Ação diária concluída! +${xp} XP em ${mission.attribute}`);
+    } else {
+      toast.success('✅ Ação diária concluída!');
+    }
+  }, [missions]);
+
+  const deleteMission = useCallback((id: string) => {
+    setMissions(prev => prev.filter(m => m.id !== id));
+    emit({ type: 'mission:deleted', missionId: id });
+    toast.success('Missão removida');
+  }, []);
+
+  // Avalia automaticamente ao passar o prazo: ≥70% das ações concluídas → 'completed', senão 'failed'.
+  useEffect(() => {
+    const evaluate = () => {
+      setMissions(prev => {
+        let changed = false;
+        const now = new Date();
+        const next = prev.map(m => {
+          if (m.status === 'completed' || m.status === 'failed') return m;
+          if (!m.deadline) return m;
+          const dl = new Date(m.deadline);
+          dl.setHours(23, 59, 59, 999);
+          if (now <= dl) return m;
+          const start = m.createdAt ? new Date(m.createdAt) : dl;
+          const total = countOccurrences(start, dl, m.weekDays);
+          const done = (m.completedDates ?? []).length;
+          const pct = total > 0 ? (done / total) * 100 : 0;
+          const newStatus: MissionStatus = pct >= 70 ? 'completed' : 'failed';
+          changed = true;
+          return { ...m, status: newStatus };
+        });
+        return changed ? next : prev;
+      });
+    };
+    evaluate();
+    const interval = setInterval(evaluate, 60_000);
+    return () => clearInterval(interval);
+  }, []);
+
+
+  // Distribui inteiros com soma exata (base + resto nas primeiras posições)
+  const distributeExact = (total: number, count: number): number[] => {
+    if (count <= 0) return [];
+    const base = Math.floor(total / count);
+    const remainder = total - base * count;
+    return Array.from({ length: count }, (_, idx) => base + (idx < remainder ? 1 : 0));
+  };
+
+  // Agrupa skills correspondentes por ÁREA (para dividir XP igualmente por área primeiro)
+  const matchSkillsByArea = (
+    prevSkills: Skill[],
+    areas: string[],
+  ): Record<string, string[]> => {
+    const areaToAttribute: Record<string, string> = {
+      'mental': 'mental',
+      'espiritual': 'spiritual',
+      'físico': 'physical',
+      'profissional': 'professional',
+      'financeiro': 'financial',
+    };
+    const grouped: Record<string, string[]> = {};
+    areas.forEach(area => {
+      const areaLower = area.toLowerCase();
+      const parenMatch = area.match(/\(([^)]+)\)/);
+      const specificSkill = parenMatch ? parenMatch[1].toLowerCase() : null;
+      let attr: string | null = null;
+      for (const [key, a] of Object.entries(areaToAttribute)) {
+        if (areaLower.includes(key)) { attr = a; break; }
+      }
+      if (!attr) return;
+      const ids = prevSkills
+        .filter(s => s.unlocked && s.attribute === attr)
+        .filter(s => {
+          if (!specificSkill) return true;
+          const n = s.name.toLowerCase();
+          return n.includes(specificSkill) || specificSkill.includes(n);
+        })
+        .map(s => s.id);
+      if (ids.length > 0) grouped[area] = ids;
+    });
+    return grouped;
+  };
+
+  // Distribui XP entre áreas na ordem informada.
+  // Regra: se houver exatamente 2 áreas, primeira = 30%, segunda = 70%.
+  // Caso contrário, distribuição igual.
+  const distributeAcrossAreas = (total: number, count: number): number[] => {
+    if (count === 2) {
+      const first = Math.round(total * 0.3);
+      return [first, total - first];
+    }
+    return distributeExact(total, count);
+  };
+
+  const applyBossPenalty = useCallback((penaltyAreas: string[], penaltyPoints: number) => {
+    setSkills(prevSkills => {
+      const grouped = matchSkillsByArea(prevSkills, penaltyAreas);
+      // Preserva a ordem informada em penaltyAreas
+      const areaKeys = penaltyAreas.filter(a => grouped[a]?.length);
+      if (areaKeys.length === 0) return prevSkills;
+
+      const perArea = distributeAcrossAreas(penaltyPoints, areaKeys.length);
+      const perSkill: Record<string, number> = {};
+      areaKeys.forEach((area, i) => {
+        const ids = grouped[area];
+        const shares = distributeExact(perArea[i], ids.length);
+        ids.forEach((id, j) => { perSkill[id] = (perSkill[id] || 0) + shares[j]; });
+      });
+
+      return prevSkills.map(skill => {
+        const dec = perSkill[skill.id];
+        if (!dec) return skill;
+        const newXp = Math.max(0, skill.xp - dec);
+        const newLevel = Math.max(0, Math.floor(newXp / XP_PER_LEVEL));
+        return { ...skill, xp: newXp, level: newLevel };
+      });
+    });
+
+    toast.error(`💀 Penalidade aplicada: -${penaltyPoints} XP nas áreas: ${penaltyAreas.join(', ')}`);
+  }, []);
+
+  const applyBossReward = useCallback((rewardAreas: string[], rewardXp: number) => {
+    setSkills(prevSkills => {
+      const grouped = matchSkillsByArea(prevSkills, rewardAreas);
+      const areaKeys = rewardAreas.filter(a => grouped[a]?.length);
+      if (areaKeys.length === 0) return prevSkills;
+
+      const perArea = distributeAcrossAreas(rewardXp, areaKeys.length);
+      const perSkill: Record<string, number> = {};
+      areaKeys.forEach((area, i) => {
+        const ids = grouped[area];
+        const shares = distributeExact(perArea[i], ids.length);
+        ids.forEach((id, j) => { perSkill[id] = (perSkill[id] || 0) + shares[j]; });
+      });
+
+      return prevSkills.map(skill => {
+        const inc = perSkill[skill.id];
+        if (!inc) return skill;
+        const newXp = skill.xp + inc;
+        const newLevel = Math.floor(newXp / XP_PER_LEVEL);
+        return { ...skill, xp: newXp, level: newLevel };
+      });
+    });
+
+    toast.success(`🏆 Recompensa aplicada: +${rewardXp} XP nas áreas: ${rewardAreas.join(', ')}`);
+  }, []);
+
+  /**
+   * Unified pipeline for awarding XP to a specific attribute.
+   * Credits directly into `attributeXpBonus`, which feeds the attribute radar
+   * and level, so it works regardless of whether the user has any unlocked
+   * skill in that area.
+   */
+  const addAttributeXp = useCallback((attribute: AttributeType, xp: number) => {
+    if (!xp || xp <= 0) return;
+    setAttributeXpBonus(prev => ({
+      ...prev,
+      [attribute]: (prev[attribute] ?? 0) + xp,
+    }));
+    emit({ type: 'xp:gained', area: attribute, amount: xp, source: 'achievement' });
+  }, []);
+
+  const value: GameContextType = {
+    user: customAvatar ? { ...user, avatar: customAvatar } : user,
+    updateAvatar,
+    setEnergy,
+    hasCompletedOnboarding,
+    completeOnboarding,
+    levelUpData,
+    dismissLevelUp,
+    skills,
+    addXpToSkill,
+    removeXpFromSkill,
+    unlockSkill,
+    addSkill,
+    resetSkills,
+    applyBossPenalty,
+    applyBossReward,
+    addAttributeXp,
+    attributes,
+    missions,
+    createMission,
+    startMission,
+    updateProgress,
+    completeMission,
+    completeDailyAction,
+    deleteMission,
+  };
+
+  return (
+    <GameContext.Provider value={value}>
+      {children}
+    </GameContext.Provider>
+  );
+}
+
+export function useGame() {
+  const context = useContext(GameContext);
+  if (context === undefined) {
+    throw new Error('useGame must be used within a GameProvider');
+  }
+  return context;
+}
