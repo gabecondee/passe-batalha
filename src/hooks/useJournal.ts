@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { emit } from '@/lib/eventBus';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export type JournalCategory =
   | 'reflexao'
@@ -110,81 +112,158 @@ export function readingMinutes(words: number): number {
   return Math.max(1, Math.round(words / 200));
 }
 
-function load(): JournalEntry[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as JournalEntry[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function save(entries: JournalEntry[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
-  localStorage.setItem('journal_entries_count', String(entries.length));
-}
-
 export function useJournal() {
+  const { user } = useAuth();
   const [entries, setEntries] = useState<JournalEntry[]>([]);
 
   useEffect(() => {
-    setEntries(load());
-  }, []);
-
-  const persist = (next: JournalEntry[]) => {
-    setEntries(next);
-    save(next);
-  };
+    if (!user) return;
+    
+    const fetchEntries = async () => {
+      const { data, error } = await supabase
+        .from('journal_entries')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('entry_date', { ascending: false })
+        .order('created_at', { ascending: false });
+        
+      if (error) {
+        console.error("Erro ao buscar diário:", error);
+        return;
+      }
+      
+      if (data) {
+        const mapped: JournalEntry[] = data.map(d => ({
+          id: d.id,
+          title: d.title,
+          category: d.category as JournalCategory,
+          content: d.content,
+          date: d.entry_date,
+          createdAt: d.created_at,
+          updatedAt: d.created_at,
+          wordCount: d.word_count,
+          readingMinutes: d.reading_minutes
+        }));
+        setEntries(mapped);
+      }
+    };
+    
+    fetchEntries();
+  }, [user]);
 
   const createEntry = useCallback(
-    (data: { title: string; category: JournalCategory; content: string; date: string }) => {
+    async (data: { title: string; category: JournalCategory; content: string; date: string }) => {
+      if (!user) return null;
+      
       const words = countWords(data.content);
-      const now = new Date().toISOString();
-      const entry: JournalEntry = {
-        id: crypto.randomUUID(),
+      const minutes = readingMinutes(words);
+      
+      const newEntry = {
+        user_id: user.id,
         title: data.title.trim(),
         category: data.category,
         content: data.content,
-        date: data.date,
-        createdAt: now,
-        updatedAt: now,
-        wordCount: words,
-        readingMinutes: readingMinutes(words),
+        entry_date: data.date,
+        word_count: words,
+        reading_minutes: minutes
       };
-      const next = [entry, ...load()];
-      persist(next);
-      emit({ type: 'journal:entry-added', count: next.length });
+
+      const { data: insertedData, error } = await supabase
+        .from('journal_entries')
+        .insert(newEntry)
+        .select()
+        .single();
+        
+      if (error) {
+        console.error("Erro ao criar entrada:", error);
+        return null;
+      }
+      
+      const entry: JournalEntry = {
+        id: insertedData.id,
+        title: insertedData.title,
+        category: insertedData.category as JournalCategory,
+        content: insertedData.content,
+        date: insertedData.entry_date,
+        createdAt: insertedData.created_at,
+        updatedAt: insertedData.created_at,
+        wordCount: insertedData.word_count,
+        readingMinutes: insertedData.reading_minutes
+      };
+
+      setEntries(prev => {
+        const next = [entry, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        emit({ type: 'journal:entry-added', count: next.length });
+        return next;
+      });
+      
       return entry;
     },
-    [],
+    [user]
   );
 
   const updateEntry = useCallback(
-    (id: string, data: Partial<Pick<JournalEntry, 'title' | 'category' | 'content' | 'date'>>) => {
-      const list = load();
-      const next = list.map((e) => {
+    async (id: string, data: Partial<Pick<JournalEntry, 'title' | 'category' | 'content' | 'date'>>) => {
+      if (!user) return;
+      
+      const updatePayload: any = {};
+      if (data.title !== undefined) updatePayload.title = data.title.trim();
+      if (data.category !== undefined) updatePayload.category = data.category;
+      if (data.content !== undefined) {
+        updatePayload.content = data.content;
+        updatePayload.word_count = countWords(data.content);
+        updatePayload.reading_minutes = readingMinutes(updatePayload.word_count);
+      }
+      if (data.date !== undefined) updatePayload.entry_date = data.date;
+
+      const { error } = await supabase
+        .from('journal_entries')
+        .update(updatePayload)
+        .eq('id', id)
+        .eq('user_id', user.id);
+        
+      if (error) {
+        console.error("Erro ao atualizar entrada:", error);
+        return;
+      }
+      
+      setEntries(prev => prev.map(e => {
         if (e.id !== id) return e;
         const merged = { ...e, ...data };
-        const words = countWords(merged.content);
-        return {
-          ...merged,
-          wordCount: words,
-          readingMinutes: readingMinutes(words),
-          updatedAt: new Date().toISOString(),
-        };
-      });
-      persist(next);
+        if (data.content) {
+          merged.wordCount = updatePayload.word_count;
+          merged.readingMinutes = updatePayload.reading_minutes;
+        }
+        merged.updatedAt = new Date().toISOString();
+        return merged;
+      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     },
-    [],
+    [user]
   );
 
-  const deleteEntry = useCallback((id: string) => {
-    const next = load().filter((e) => e.id !== id);
-    persist(next);
-    emit({ type: 'journal:entry-deleted', count: next.length });
-  }, []);
+  const deleteEntry = useCallback(
+    async (id: string) => {
+      if (!user) return;
+      
+      const { error } = await supabase
+        .from('journal_entries')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+        
+      if (error) {
+        console.error("Erro ao deletar entrada:", error);
+        return;
+      }
+      
+      setEntries(prev => {
+        const next = prev.filter(e => e.id !== id);
+        emit({ type: 'journal:entry-deleted', count: next.length });
+        return next;
+      });
+    },
+    [user]
+  );
 
   return { entries, createEntry, updateEntry, deleteEntry };
 }
