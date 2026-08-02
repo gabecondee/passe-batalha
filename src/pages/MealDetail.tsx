@@ -12,13 +12,25 @@ import { getMealIcon } from '@/lib/mealIcon';
 export default function MealDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { meals, renameMeal, deleteMeal, addFood, updateFood, deleteFood } = useMeals();
+  const { meals, isLoading, renameMeal, deleteMeal, addFood, updateFood, deleteFood } = useMeals();
 
   const meal = useMemo(() => meals.find((m) => m.id === id), [meals, id]);
 
   const [renameOpen, setRenameOpen] = useState(false);
   const [foodOpen, setFoodOpen] = useState(false);
   const [editingFood, setEditingFood] = useState<FoodEntry | undefined>();
+
+  if (isLoading) {
+    return (
+      <MainLayout>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
+          <p className="text-sm text-muted-foreground uppercase tracking-widest font-display animate-pulse">
+            Carregando refeição...
+          </p>
+        </div>
+      </MainLayout>
+    );
+  }
 
   if (!meal) {
     return (

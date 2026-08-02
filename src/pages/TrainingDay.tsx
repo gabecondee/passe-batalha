@@ -11,8 +11,7 @@ import { MuscleIcon } from '@/components/training/MuscleIcon';
 import { WorkoutResultDialog } from '@/components/training/WorkoutResultDialog';
 import { useGame } from '@/contexts/GameContext';
 import {
-  loadDayWorkout,
-  saveDayWorkout,
+  useTraining,
   DayWorkout,
   Exercise,
   MuscleId,
@@ -34,6 +33,8 @@ export default function TrainingDay() {
   const navigate = useNavigate();
   const { applyBossReward } = useGame();
 
+  const { exercises: allExercises, addExercise, updateExercise, deleteExercise, logWorkout } = useTraining();
+  
   const [workout, setWorkout] = useState<DayWorkout>({ muscles: [], exercises: [] });
   const [muscleOpen, setMuscleOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
@@ -45,14 +46,31 @@ export default function TrainingDay() {
   >(null);
 
   useEffect(() => {
-    setWorkout(loadDayWorkout(day));
+    const dayEx = allExercises.filter(e => e.day_of_week === day);
+    setWorkout(prev => {
+      return {
+        muscles: [],
+        exercises: dayEx.map(e => {
+          const prevEx = prev.exercises.find(p => p.id === e.id);
+          return {
+            ...e,
+            sets: e.sets.map((s, i) => ({
+              ...s,
+              done: prevEx?.sets[i]?.done || false
+            }))
+          };
+        })
+      };
+    });
+  }, [allExercises, day]);
+
+  useEffect(() => {
     setStarted(false);
     startedAtRef.current = null;
   }, [day]);
 
   const persist = (next: DayWorkout) => {
     setWorkout(next);
-    saveDayWorkout(day, next);
   };
 
   const resetChecks = (w: DayWorkout): DayWorkout => ({
@@ -79,6 +97,8 @@ export default function TrainingDay() {
       try { applyBossReward(['físico'], 10); } catch { /* ignore */ }
     }
 
+    logWorkout(variant, day);
+
     // Reset done checks, keep reps/weight/info
     persist(resetChecks(workout));
     setStarted(false);
@@ -100,28 +120,22 @@ export default function TrainingDay() {
     persist({ ...workout, muscles: ids });
   };
 
-  const handleAddExercise = (draft: ExerciseDraft) => {
-    const exercise: Exercise = {
-      id: `ex_${Date.now()}`,
-      name: draft.name,
-      sets: Array.from({ length: draft.sets }, () => ({
-        reps: draft.reps,
-        weight: draft.weight,
-        done: false,
-      })),
-    };
-    persist({ ...workout, exercises: [...workout.exercises, exercise] });
+  const handleAddExercise = async (draft: ExerciseDraft) => {
+    await addExercise(day, draft);
   };
 
-  const handleUpdateExercise = (updated: Exercise) => {
+  const handleUpdateExercise = async (updated: Exercise) => {
+    // update local UI immediately
     persist({
       ...workout,
       exercises: workout.exercises.map((e) => (e.id === updated.id ? updated : e)),
     });
+    // sync to supabase in background
+    updateExercise(updated.id, updated);
   };
 
-  const handleDeleteExercise = (id: string) => {
-    persist({ ...workout, exercises: workout.exercises.filter((e) => e.id !== id) });
+  const handleDeleteExercise = async (id: string) => {
+    await deleteExercise(id);
   };
 
   const selectedMuscles = useMemo(

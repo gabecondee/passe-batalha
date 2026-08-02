@@ -8,7 +8,7 @@ import { TrainingPlanDialog, TrainingPlan, WeekDayKey } from '@/components/train
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { useGame } from '@/contexts/GameContext';
 import { toast } from '@/hooks/use-toast';
-import { loadAllWorkouts, MUSCLES, MuscleId } from '@/lib/workoutStorage';
+import { useTraining, MUSCLES, MuscleId } from '@/lib/workoutStorage';
 import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'training_plan_v1';
@@ -32,38 +32,22 @@ const MUSCLE_NAME: Record<MuscleId, string> = MUSCLES.reduce((acc, m) => {
 
 export default function Training() {
   const [open, setOpen] = useState(false);
-  const [plan, setPlan] = useState<TrainingPlan | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
-  const [workouts, setWorkouts] = useState<Record<string, { muscles: MuscleId[] }>>({});
   const { user } = useGame();
   const navigate = useNavigate();
+  
+  const { plan, exercises, isLoading, savePlan, deletePlan } = useTraining();
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setPlan(JSON.parse(raw));
-    } catch {
-      // ignore
-    }
-    setWorkouts(loadAllWorkouts());
-  }, []);
-
-  const handleSave = (p: TrainingPlan) => {
-    setPlan(p);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
+  const handleSave = async (p: TrainingPlan) => {
+    await savePlan(p);
     toast({
       title: 'Plano salvo!',
       description: `${p.days.length} dia(s) de treino configurado(s).`,
     });
   };
 
-  const handleDeletePlan = () => {
-    setPlan(null);
-    setWorkouts({});
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem('training_day_workouts_v1');
-    localStorage.removeItem('trainings_completed_days_v1');
-    localStorage.removeItem('trainings_completed');
+  const handleDeletePlan = async () => {
+    await deletePlan();
     setConfirmDeleteOpen(false);
     toast({ title: 'Plano excluído', description: 'Todas as informações de treino foram resetadas.' });
   };
@@ -71,9 +55,11 @@ export default function Training() {
   const sortedDays = plan?.days.slice().sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)) ?? [];
 
   const musclesForDay = (d: WeekDayKey): string => {
-    const ids = workouts[d]?.muscles ?? [];
-    if (ids.length === 0) return 'Vazio';
-    return ids.map((id) => MUSCLE_NAME[id]).join(', ');
+    // In new version we don't save muscle ids explicitly, just exercises.
+    // If we wanted to, we could map them. For now we just say "Ativo" if there are exercises, or Empty.
+    const dayEx = exercises.filter(e => e.day_of_week === d);
+    if (dayEx.length === 0) return 'Vazio';
+    return `${dayEx.length} exercícios`;
   };
 
   const toTitleCase = (s: string) =>

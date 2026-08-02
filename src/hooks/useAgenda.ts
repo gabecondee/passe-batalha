@@ -14,19 +14,7 @@ import {
 } from '@/services/googleCalendar';
 
 const STORAGE_KEY = 'agenda_events_v1';
-const TRAINING_KEY = 'training_plan_v1';
-const TRAINING_DONE_KEY = 'training_completed_v1';
-const GOOGLE_SESSION_KEY = 'google_calendar_session_v1';
-
-function loadTrainingDone(): Record<string, string[]> {
-  try {
-    const raw = localStorage.getItem(TRAINING_DONE_KEY);
-    if (!raw) return {};
-    return JSON.parse(raw) as Record<string, string[]>;
-  } catch {
-    return {};
-  }
-}
+import { useTraining } from '@/lib/workoutStorage';
 
 // Mission WeekDay → JS day index (0=Sun..6=Sat)
 const WEEKDAY_TO_INDEX: Record<WeekDay, number> = {
@@ -84,8 +72,9 @@ interface CreateInput {
 
 export function useAgenda() {
   const { missions } = useGame();
+  const { plan: trainingPlan } = useTraining();
   const [manualEvents, setManualEvents] = useState<AgendaEvent[]>(loadEvents);
-  const [trainingDone, setTrainingDone] = useState<Record<string, string[]>>(loadTrainingDone);
+  const [trainingDone, setTrainingDone] = useState<Record<string, string[]>>({});
 
   const [googleSession, setGoogleSession] = useState<GoogleSession | null>(loadGoogleSession);
   const [googleEvents, setGoogleEvents] = useState<AgendaEvent[]>([]);
@@ -97,8 +86,8 @@ export function useAgenda() {
   }, [manualEvents]);
 
   useEffect(() => {
-    localStorage.setItem(TRAINING_DONE_KEY, JSON.stringify(trainingDone));
-  }, [trainingDone]);
+    saveEvents(manualEvents);
+  }, [manualEvents]);
 
   useEffect(() => {
     if (googleSession) {
@@ -248,23 +237,16 @@ export function useAgenda() {
   const derivedMissionEvents = useMemo<AgendaEvent[]>(() => [], []);
 
   const derivedTrainingEvents = useMemo<AgendaEvent[]>(() => {
-    let plan: { days?: string[]; time?: string } | null = null;
-    try {
-      const raw = localStorage.getItem(TRAINING_KEY);
-      if (raw) plan = JSON.parse(raw);
-    } catch {
-      // ignore
-    }
-    if (!plan?.days || plan.days.length === 0) return [];
-    const trainingTime = plan.time || '18:00';
+    if (!trainingPlan?.days || trainingPlan.days.length === 0) return [];
+    const trainingTime = trainingPlan.time || '18:00';
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const targetDays = plan.days
-      .map((k) => TRAINING_KEY_TO_INDEX[k])
-      .filter((i) => i !== undefined);
+    const targetDays = trainingPlan.days
+      .map((k: string) => TRAINING_KEY_TO_INDEX[k])
+      .filter((i: number | undefined) => i !== undefined);
     const dayLabelByIdx: Record<number, string> = {};
-    plan.days.forEach((k) => {
+    trainingPlan.days.forEach((k: string) => {
       const idx = TRAINING_KEY_TO_INDEX[k];
       if (idx !== undefined) dayLabelByIdx[idx] = TRAINING_DAY_LABEL[k] || k;
     });

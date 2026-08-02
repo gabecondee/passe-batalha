@@ -16,8 +16,8 @@ import { DietPlanDialog, DietPlan } from '@/components/diet/DietPlanDialog';
 import { MealDialog } from '@/components/diet/MealDialog';
 import { useMeals, sumMeal } from '@/hooks/useMeals';
 import { getMealIcon } from '@/lib/mealIcon';
-
-const STORAGE_KEY = 'diet_plan_v1';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 const MACRO_COLORS = {
   carbs: 'hsl(210 90% 60%)', // blue
@@ -66,6 +66,7 @@ const goalLabel: Record<DietPlan['goal'], string> = {
 };
 
 export default function Diet() {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const { meals, addMeal } = useMeals();
   const [plan, setPlan] = useState<DietPlan | null>(null);
@@ -73,20 +74,49 @@ export default function Diet() {
   const [mealDialog, setMealDialog] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setPlan(JSON.parse(raw));
-      } catch {}
-    }
-  }, []);
+    if (!user) return;
+    const fetchPlan = async () => {
+      const { data, error } = await supabase
+        .from('diet_plans')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-  const handleGenerate = (p: DietPlan) => {
+      if (data) {
+        setPlan({
+          gender: data.gender as any,
+          age: data.age,
+          height: data.height,
+          weight: Number(data.weight),
+          activity: data.activity as any,
+          goal: data.goal as any,
+        });
+      }
+    };
+    fetchPlan();
+  }, [user]);
+
+  const handleGenerate = async (p: DietPlan) => {
     setPlan(p);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-    const prev = Number(localStorage.getItem('diet_plans_created_count') || 0);
-    localStorage.setItem('diet_plans_created_count', String(prev + 1));
-    window.dispatchEvent(new Event('storage'));
+    
+    if (user) {
+      const computed = computeTargets(p);
+      await supabase.from('diet_plans').insert({
+        user_id: user.id,
+        gender: p.gender,
+        age: p.age,
+        height: p.height,
+        weight: p.weight,
+        activity: p.activity,
+        goal: p.goal,
+        kcal_target: computed.kcal,
+        protein_target: computed.protein.g,
+        carbs_target: computed.carbs.g,
+        fat_target: computed.fat.g
+      });
+    }
   };
 
   const targets = useMemo(() => (plan ? computeTargets(plan) : null), [plan]);
@@ -125,8 +155,8 @@ export default function Diet() {
         ].filter((d) => d.value > 0)
       : [{ name: 'empty', value: 1, color: 'hsl(0 0% 15%)' }];
 
-  const handleCreateMeal = (name: string, time: string) => {
-    const id = addMeal(name, time);
+  const handleCreateMeal = async (name: string, time: string) => {
+    const id = await addMeal(name, time);
     navigate(`/diet/meal/${id}`);
   };
 

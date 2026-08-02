@@ -1,55 +1,30 @@
-export type MuscleId =
-  | 'chest'
-  | 'back'
-  | 'shoulders'
-  | 'biceps'
-  | 'triceps'
-  | 'forearms'
-  | 'trapezius'
-  | 'abs'
-  | 'glutes'
-  | 'quads'
-  | 'hamstrings'
-  | 'adductors'
-  | 'abductors'
-  | 'calves'
-  | 'cardio'
-  | 'full_body';
+import { useEffect, useState, useCallback } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { emit } from '@/lib/eventBus';
 
-export interface MuscleDef {
-  id: MuscleId;
-  name: string;
-}
+export type MuscleId = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'trapezius' | 'abs' | 'glutes' | 'quads' | 'hamstrings' | 'adductors' | 'abductors' | 'calves' | 'cardio' | 'full_body';
+
+export interface MuscleDef { id: MuscleId; name: string; }
 
 export const MUSCLES: MuscleDef[] = [
-  { id: 'chest', name: 'Peito' },
-  { id: 'back', name: 'Costas' },
-  { id: 'shoulders', name: 'Ombros' },
-  { id: 'trapezius', name: 'Trapézio' },
-  { id: 'biceps', name: 'Bíceps' },
-  { id: 'triceps', name: 'Tríceps' },
-  { id: 'forearms', name: 'Antebraços' },
-  { id: 'abs', name: 'Abdômen' },
-  { id: 'glutes', name: 'Glúteos' },
-  { id: 'quads', name: 'Quadríceps' },
-  { id: 'hamstrings', name: 'Posteriores' },
-  { id: 'adductors', name: 'Adutores' },
-  { id: 'abductors', name: 'Abdutores' },
-  { id: 'calves', name: 'Panturrilhas' },
-  { id: 'cardio', name: 'Cardio' },
-  { id: 'full_body', name: 'Full body' },
+  { id: 'chest', name: 'Peito' }, { id: 'back', name: 'Costas' }, { id: 'shoulders', name: 'Ombros' }, { id: 'trapezius', name: 'Trapézio' },
+  { id: 'biceps', name: 'Bíceps' }, { id: 'triceps', name: 'Tríceps' }, { id: 'forearms', name: 'Antebraços' }, { id: 'abs', name: 'Abdômen' },
+  { id: 'glutes', name: 'Glúteos' }, { id: 'quads', name: 'Quadríceps' }, { id: 'hamstrings', name: 'Posteriores' }, { id: 'adductors', name: 'Adutores' },
+  { id: 'abductors', name: 'Abdutores' }, { id: 'calves', name: 'Panturrilhas' }, { id: 'cardio', name: 'Cardio' }, { id: 'full_body', name: 'Full body' }
 ];
 
 export interface ExerciseSet {
   reps: number;
   weight: number;
-  done: boolean;
+  done: boolean; // Managed only in frontend state during execution
 }
 
 export interface Exercise {
   id: string;
   name: string;
   sets: ExerciseSet[];
+  day_of_week?: string;
 }
 
 export interface DayWorkout {
@@ -57,56 +32,145 @@ export interface DayWorkout {
   exercises: Exercise[];
 }
 
-const STORAGE_KEY = 'training_day_workouts_v1';
+export function useTraining() {
+  const { user } = useAuth();
+  const [plan, setPlan] = useState<any | null>(null);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-export function loadAllWorkouts(): Record<string, DayWorkout> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {
-    // ignore
-  }
-  return {};
-}
+  const fetchAll = useCallback(async () => {
+    if (!user) return;
+    setIsLoading(true);
+    
+    // Fetch Plan
+    const { data: pData } = await supabase
+      .from('training_plans')
+      .select('*')
+      .eq('user_id', user.id)
+      .limit(1)
+      .maybeSingle();
 
-export function loadDayWorkout(day: string): DayWorkout {
-  const all = loadAllWorkouts();
-  return all[day] ?? { muscles: [], exercises: [] };
-}
-
-export function saveDayWorkout(day: string, workout: DayWorkout) {
-  const all = loadAllWorkouts();
-  all[day] = workout;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(all));
-
-  // Auto-detect completion: every set done, at least one exercise, once per day.
-  try {
-    const totalSets = workout.exercises.reduce((s, e) => s + e.sets.length, 0);
-    const doneSets = workout.exercises.reduce(
-      (s, e) => s + e.sets.filter((st) => st.done).length,
-      0,
-    );
-    if (totalSets > 0 && doneSets === totalSets) {
-      const today = new Date().toISOString().slice(0, 10);
-      const markKey = 'trainings_completed_days_v1';
-      const raw = localStorage.getItem(markKey);
-      const set = new Set<string>(raw ? JSON.parse(raw) : []);
-      const marker = `${today}:${day}`;
-      if (!set.has(marker)) {
-        set.add(marker);
-        const arr = Array.from(set);
-        localStorage.setItem(markKey, JSON.stringify(arr));
-        const total = Number(localStorage.getItem('trainings_completed') || 0) + 1;
-        localStorage.setItem('trainings_completed', String(total));
-        // Fire event via CustomEvent (workoutStorage is not React-aware).
-        window.dispatchEvent(
-          new CustomEvent('pb-event', {
-            detail: { type: 'workout:completed', day, total },
-          }),
-        );
-      }
+    if (pData) {
+      setPlan({
+        id: pData.id,
+        days: pData.days_of_week || [],
+        age: pData.age,
+        height: pData.height,
+        weight: pData.weight,
+        time: pData.schedule_time || '18:00'
+      });
+    } else {
+      setPlan(null);
     }
-  } catch {
-    /* ignore */
-  }
+    
+    // Fetch Exercises
+    const { data: eData } = await supabase
+      .from('exercises')
+      .select('*')
+      .eq('user_id', user.id);
+      
+    if (eData) {
+      setExercises(eData.map(e => ({
+        id: e.id,
+        name: e.name,
+        sets: Array.from({ length: e.sets || 0 }, () => ({ reps: e.reps || 0, weight: e.weight_kg || 0, done: false })),
+        day_of_week: e.day_of_week
+      })));
+    }
+    setIsLoading(false);
+  }, [user]);
+
+  useEffect(() => {
+    fetchAll();
+  }, [fetchAll]);
+
+  const savePlan = async (p: any) => {
+    if (!user) return;
+    if (plan?.id) {
+      await supabase.from('training_plans').update({
+        days_of_week: p.days,
+        age: p.age,
+        height: p.height,
+        weight: p.weight,
+        schedule_time: p.time
+      }).eq('id', plan.id);
+    } else {
+      await supabase.from('training_plans').insert({
+        user_id: user.id,
+        days_of_week: p.days,
+        age: p.age,
+        height: p.height,
+        weight: p.weight,
+        schedule_time: p.time
+      });
+    }
+    await fetchAll();
+  };
+
+  const deletePlan = async () => {
+    if (!user) return;
+    await supabase.from('training_plans').delete().eq('user_id', user.id);
+    await fetchAll();
+  };
+
+  const addExercise = async (day: string, draft: any) => {
+    if (!user) return;
+    await supabase.from('exercises').insert({
+      user_id: user.id,
+      day_of_week: day,
+      name: draft.name,
+      sets: draft.sets,
+      reps: draft.reps,
+      weight_kg: draft.weight
+    });
+    await fetchAll();
+  };
+
+  const updateExercise = async (id: string, updated: any) => {
+    if (!user) return;
+    // updated has the shape of Exercise interface, we extract sets length etc
+    const numSets = updated.sets.length;
+    const reps = numSets > 0 ? updated.sets[0].reps : 0;
+    const weight = numSets > 0 ? updated.sets[0].weight : 0;
+
+    await supabase.from('exercises').update({
+      name: updated.name,
+      sets: numSets,
+      reps: reps,
+      weight_kg: weight
+    }).eq('id', id);
+    await fetchAll();
+  };
+
+  const deleteExercise = async (id: string) => {
+    if (!user) return;
+    await supabase.from('exercises').delete().eq('id', id);
+    await fetchAll();
+  };
+
+  const logWorkout = async (status: 'success' | 'early-end', day: string) => {
+    if (!user) return;
+    const today = new Date().toISOString().slice(0, 10);
+    await supabase.from('workout_logs').insert({
+      user_id: user.id,
+      date: today,
+      status: status
+    });
+    
+    // Regra inegociável 3: emitir evento workout:completed
+    emit({ type: 'workout:completed', day });
+    window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', day } }));
+  };
+
+  return {
+    plan,
+    exercises,
+    isLoading,
+    savePlan,
+    deletePlan,
+    addExercise,
+    updateExercise,
+    deleteExercise,
+    logWorkout
+  };
 }

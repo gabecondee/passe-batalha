@@ -1,25 +1,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { FoodEntry } from '@/components/diet/FoodDialog';
 import { emit } from '@/lib/eventBus';
-
-const DIET_DAYS_KEY = 'diet_days_set_v1';
-
-function markDietDay() {
-  try {
-    const today = new Date().toISOString().slice(0, 10);
-    const raw = localStorage.getItem(DIET_DAYS_KEY);
-    const set = new Set<string>(raw ? JSON.parse(raw) : []);
-    if (!set.has(today)) {
-      set.add(today);
-      const arr = Array.from(set);
-      localStorage.setItem(DIET_DAYS_KEY, JSON.stringify(arr));
-      localStorage.setItem('diet_days_followed', String(arr.length));
-    }
-    emit({ type: 'meal:logged', date: today });
-  } catch {
-    /* ignore */
-  }
-}
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
 
 export interface Meal {
   id: string;
@@ -27,8 +10,6 @@ export interface Meal {
   time?: string;
   foods: FoodEntry[];
 }
-
-export const MEALS_KEY = 'diet_meals_v1';
 
 export const uid = () => Math.random().toString(36).slice(2, 10);
 
@@ -44,90 +25,165 @@ export function sumMeal(m: Meal) {
   );
 }
 
-function read(): Meal[] {
-  try {
-    const raw = localStorage.getItem(MEALS_KEY);
-    return raw ? (JSON.parse(raw) as Meal[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-function write(meals: Meal[]) {
-  localStorage.setItem(MEALS_KEY, JSON.stringify(meals));
-  window.dispatchEvent(new Event('diet:meals-changed'));
-}
-
 export function useMeals() {
-  const [meals, setMealsState] = useState<Meal[]>(() => read());
+  const { user } = useAuth();
+  const [meals, setMealsState] = useState<Meal[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const sync = () => setMealsState(read());
-    window.addEventListener('diet:meals-changed', sync);
-    window.addEventListener('storage', sync);
-    return () => {
-      window.removeEventListener('diet:meals-changed', sync);
-      window.removeEventListener('storage', sync);
+    if (!user) {
+      setIsLoading(false);
+      return;
+    }
+    
+    const fetchMeals = async () => {
+      setIsLoading(true);
+      const { data, error } = await supabase
+        .from('meals')
+        .select('*, foods(*)')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true });
+        
+      if (error) {
+        console.error("Erro ao buscar refeições:", error);
+        return;
+      }
+      
+      if (data) {
+        const mapped: Meal[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          time: d.meal_time || undefined,
+          foods: (d.foods || []).map((f: any) => ({
+            id: f.id,
+            name: f.name,
+            quantity: Number(f.quantity),
+            kcal: f.kcal,
+            carbs: Number(f.carbs),
+            protein: Number(f.protein),
+            fat: Number(f.fat)
+          }))
+        }));
+        setMealsState(mapped);
+      }
+      setIsLoading(false);
     };
-  }, []);
-
-  const update = useCallback((updater: (prev: Meal[]) => Meal[]) => {
-    setMealsState((prev) => {
-      const next = updater(prev);
-      write(next);
-      return next;
-    });
-  }, []);
+    
+    fetchMeals();
+  }, [user]);
 
   const addMeal = useCallback(
-    (name: string, time?: string) => {
-      const id = uid();
-      update((ms) => [...ms, { id, name, time, foods: [] }]);
-      return id;
+    async (name: string, time?: string) => {
+      if (!user) return '';
+      
+      const { data, error } = await supabase
+        .from('meals')
+        .insert({
+          user_id: user.id,
+          name,
+          meal_time: time
+        })
+        .select()
+        .single();
+        
+      if (error) {
+        console.error("Erro ao adicionar refeição:", error);
+        return '';
+      }
+      
+      setMealsState(prev => [...prev, { id: data.id, name: data.name, time: data.meal_time, foods: [] }]);
+      return data.id;
     },
-    [update],
+    [user],
   );
 
   const renameMeal = useCallback(
-    (id: string, name: string, time?: string) =>
-      update((ms) => ms.map((m) => (m.id === id ? { ...m, name, ...(time !== undefined ? { time } : {}) } : m))),
-    [update],
+    async (id: string, name: string, time?: string) => {
+      if (!user) return;
+      await supabase.from('meals').update({ name, meal_time: time }).eq('id', id);
+      setMealsState((ms) => ms.map((m) => (m.id === id ? { ...m, name, ...(time !== undefined ? { time } : {}) } : m)));
+    },
+    [user],
   );
 
   const deleteMeal = useCallback(
-    (id: string) => update((ms) => ms.filter((m) => m.id !== id)),
-    [update],
+    async (id: string) => {
+      if (!user) return;
+      await supabase.from('meals').delete().eq('id', id);
+      setMealsState((ms) => ms.filter((m) => m.id !== id));
+    },
+    [user],
   );
 
   const addFood = useCallback(
-    (mealId: string, food: Omit<FoodEntry, 'id'>) => {
-      update((ms) =>
-        ms.map((m) => (m.id === mealId ? { ...m, foods: [...m.foods, { ...food, id: uid() }] } : m)),
+    async (mealId: string, food: Omit<FoodEntry, 'id'>) => {
+      if (!user) return;
+      
+      const { data, error } = await supabase
+        .from('foods')
+        .insert({
+          user_id: user.id,
+          meal_id: mealId,
+          name: food.name,
+          quantity: food.quantity,
+          kcal: food.kcal,
+          carbs: food.carbs,
+          protein: food.protein,
+          fat: food.fat
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error("Erro ao adicionar alimento:", error);
+        return;
+      }
+      
+      setMealsState((ms) =>
+        ms.map((m) => (m.id === mealId ? { ...m, foods: [...m.foods, { ...food, id: data.id }] } : m)),
       );
-      markDietDay();
+      
+      // Regra 3 inegociável
+      const today = new Date().toISOString().slice(0, 10);
+      emit({ type: 'meal:logged', date: today });
     },
-    [update],
+    [user],
   );
 
   const updateFood = useCallback(
-    (mealId: string, foodId: string, food: Omit<FoodEntry, 'id'>) =>
-      update((ms) =>
+    async (mealId: string, foodId: string, food: Omit<FoodEntry, 'id'>) => {
+      if (!user) return;
+      await supabase.from('foods').update({
+        name: food.name,
+        quantity: food.quantity,
+        kcal: food.kcal,
+        carbs: food.carbs,
+        protein: food.protein,
+        fat: food.fat
+      }).eq('id', foodId);
+
+      setMealsState((ms) =>
         ms.map((m) =>
           m.id === mealId
             ? { ...m, foods: m.foods.map((f) => (f.id === foodId ? { ...food, id: foodId } : f)) }
             : m,
         ),
-      ),
-    [update],
+      );
+    },
+    [user],
   );
 
   const deleteFood = useCallback(
-    (mealId: string, foodId: string) =>
-      update((ms) =>
+    async (mealId: string, foodId: string) => {
+      if (!user) return;
+      await supabase.from('foods').delete().eq('id', foodId);
+      
+      setMealsState((ms) =>
         ms.map((m) => (m.id === mealId ? { ...m, foods: m.foods.filter((f) => f.id !== foodId) } : m)),
-      ),
-    [update],
+      );
+    },
+    [user],
   );
 
-  return { meals, addMeal, renameMeal, deleteMeal, addFood, updateFood, deleteFood };
+  return { meals, isLoading, addMeal, renameMeal, deleteMeal, addFood, updateFood, deleteFood };
 }
