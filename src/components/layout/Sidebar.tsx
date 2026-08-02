@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { isNavItemActive } from '@/lib/navModules';
-import logoAsset from '@/assets/passe-batalha-logo.png.asset.json';
+import logoSrc from '@/assets/logo.png';
 
 const navItems = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard },
@@ -43,8 +43,8 @@ export function Sidebar() {
         <div className="flex flex-col h-full p-4">
           {/* Logo */}
           <div className="flex items-center gap-3 px-2 py-6 mb-4">
-            <div className="w-16 h-16 shrink-0 rounded-xl bg-background flex items-center justify-center border border-primary/30 overflow-hidden">
-              <img src={logoAsset.url} alt="Passe de Batalha" className="w-12 h-12 object-contain" />
+            <div className="w-16 h-16 shrink-0 rounded-full bg-background flex items-center justify-center border border-primary/30 overflow-hidden">
+              <img src={logoSrc} alt="Passe de Batalha" className="w-full h-full object-contain" />
             </div>
             <div className="min-w-0">
               <h1 className="font-display text-[13px] font-bold text-primary leading-tight whitespace-nowrap">Passe de Batalha</h1>

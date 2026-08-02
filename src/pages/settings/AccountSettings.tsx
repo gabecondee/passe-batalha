@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
@@ -6,19 +7,37 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export default function AccountSettings() {
+  const navigate = useNavigate();
   const [step, setStep] = useState<0 | 1 | 2>(0);
+  const [deleteInput, setDeleteInput] = useState('');
 
   const signOut = async () => {
     try { await supabase.auth.signOut(); } catch {}
     toast.success('Sessão encerrada');
-    setTimeout(() => (window.location.href = '/'), 500);
+    navigate('/', { replace: true });
   };
 
   const deleteAccount = async () => {
-    try { await supabase.auth.signOut(); } catch {}
+    if (deleteInput !== 'excluir-conta') return;
+    try { 
+      const { error } = await supabase.rpc('delete_user_account');
+      
+      if (error) {
+        console.error("Erro ao excluir conta:", error);
+        toast.error("Não foi possível excluir a conta. " + error.message);
+        return; // Pare a execução aqui!
+      }
+
+      await supabase.auth.signOut(); 
+    } catch (e: any) {
+      console.error("Erro de rede/execução ao excluir conta:", e);
+      toast.error("Erro inesperado ao excluir conta.");
+      return;
+    }
+    
     localStorage.clear();
     toast.success('Conta excluída. Sentiremos sua falta, guerreiro.');
-    setTimeout(() => (window.location.href = '/'), 800);
+    navigate('/', { replace: true });
   };
 
   return (
@@ -74,9 +93,23 @@ export default function AccountSettings() {
                 <button onClick={() => setStep(0)} className="flex-1 px-3 py-2 rounded-lg border border-border font-display text-xs tracking-wider">CANCELAR</button>
               </div>
             ) : (
-              <div className="flex gap-2">
-                <button onClick={deleteAccount} className="flex-1 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground font-display text-xs tracking-wider">EXCLUIR DEFINITIVAMENTE</button>
-                <button onClick={() => setStep(0)} className="flex-1 px-3 py-2 rounded-lg border border-border font-display text-xs tracking-wider">CANCELAR</button>
+              <div className="space-y-4 pt-2">
+                <p className="text-sm font-display text-destructive">Para continuar, digite <span className="font-bold">excluir-conta</span> abaixo:</p>
+                <input 
+                  type="text" 
+                  value={deleteInput}
+                  onChange={(e) => setDeleteInput(e.target.value)}
+                  className="w-full bg-background border border-destructive/50 rounded-lg p-2.5 text-sm text-foreground focus:outline-none focus:border-destructive" 
+                  placeholder="excluir-conta"
+                />
+                <div className="flex gap-2">
+                  <button 
+                    onClick={deleteAccount} 
+                    disabled={deleteInput !== 'excluir-conta'}
+                    className="flex-1 px-3 py-2 rounded-lg bg-destructive text-destructive-foreground font-display text-xs tracking-wider disabled:opacity-50 disabled:cursor-not-allowed"
+                  >EXCLUIR DEFINITIVAMENTE</button>
+                  <button onClick={() => { setStep(0); setDeleteInput(''); }} className="flex-1 px-3 py-2 rounded-lg border border-border font-display text-xs tracking-wider">CANCELAR</button>
+                </div>
               </div>
             )}
           </div>

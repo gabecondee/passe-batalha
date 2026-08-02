@@ -12,8 +12,9 @@ import {
   requestAccessToken,
   revokeAccess,
 } from '@/services/googleCalendar';
-
-const STORAGE_KEY = 'agenda_events_v1';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+const GOOGLE_SESSION_KEY = 'google_calendar_session_v1';
 import { useTraining } from '@/lib/workoutStorage';
 
 // Mission WeekDay → JS day index (0=Sun..6=Sat)
@@ -30,23 +31,7 @@ const TRAINING_DAY_LABEL: Record<string, string> = {
   Q2: 'Quinta', S2: 'Sexta', S3: 'Sábado',
 };
 
-function loadEvents(): AgendaEvent[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as AgendaEvent[];
-    return parsed.map((e) => ({
-      ...e,
-      category: normalizeCategory(e.category as unknown as string),
-    }));
-  } catch {
-    return [];
-  }
-}
-
-function saveEvents(events: AgendaEvent[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-}
+// Remove loadEvents and saveEvents
 
 function loadGoogleSession(): GoogleSession | null {
   try {
@@ -71,23 +56,44 @@ interface CreateInput {
 }
 
 export function useAgenda() {
+  const { user } = useAuth();
   const { missions } = useGame();
   const { plan: trainingPlan } = useTraining();
-  const [manualEvents, setManualEvents] = useState<AgendaEvent[]>(loadEvents);
+  
+  const [manualEvents, setManualEvents] = useState<AgendaEvent[]>([]);
   const [trainingDone, setTrainingDone] = useState<Record<string, string[]>>({});
-
+  
   const [googleSession, setGoogleSession] = useState<GoogleSession | null>(loadGoogleSession);
   const [googleEvents, setGoogleEvents] = useState<AgendaEvent[]>([]);
   const [googleSyncing, setGoogleSyncing] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
 
-  useEffect(() => {
-    saveEvents(manualEvents);
-  }, [manualEvents]);
+  const fetchManualEvents = useCallback(async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from('agenda_events')
+      .select('*')
+      .eq('user_id', user.id);
+      
+    if (data) {
+      setManualEvents(data.map(d => ({
+        id: d.id,
+        name: d.title,
+        category: normalizeCategory(d.category || 'health'),
+        date: d.event_date,
+        time: d.event_time || undefined,
+        description: d.description || undefined,
+        recurrence: (d.recurrence || 'none') as AgendaRecurrence,
+        source: (d.source || 'manual') as any,
+        completed: d.status === 'done',
+        createdAt: d.created_at || new Date().toISOString()
+      })));
+    }
+  }, [user]);
 
   useEffect(() => {
-    saveEvents(manualEvents);
-  }, [manualEvents]);
+    fetchManualEvents();
+  }, [fetchManualEvents]);
 
   useEffect(() => {
     if (googleSession) {
@@ -165,28 +171,45 @@ export function useAgenda() {
       }
     }
 
-    const event: AgendaEvent = {
-      id: `evt-${Date.now()}`,
-      name: data.name,
+    if (!user) return;
+    
+    // First, insert in Supabase
+    const { data: inserted } = await supabase.from('agenda_events').insert({
+      user_id: user.id,
+      title: data.name,
       category: data.category,
-      date: data.date,
-      time: data.time,
-      description: data.description,
+      event_date: data.date,
+      event_time: data.time || null,
+      description: data.description || null,
       recurrence: data.recurrence,
-      source: 'manual',
-      googleCalendarId,
-      googleCalendarLink,
-      completed: false,
-      createdAt: new Date().toISOString(),
-    };
-    setManualEvents((prev) => [event, ...prev]);
+      status: 'pending',
+      source: 'manual'
+    }).select().single();
+
+    if (inserted) {
+      const event: AgendaEvent = {
+        id: inserted.id,
+        name: inserted.title,
+        category: data.category,
+        date: inserted.event_date,
+        time: inserted.event_time || undefined,
+        description: inserted.description || undefined,
+        recurrence: data.recurrence,
+        source: 'manual',
+        googleCalendarId,
+        googleCalendarLink,
+        completed: false,
+        createdAt: inserted.created_at || new Date().toISOString(),
+      };
+      setManualEvents((prev) => [event, ...prev]);
+    }
 
     if (googleCalendarId) {
       syncGoogleEvents();
     }
   }, [googleSession, syncGoogleEvents]);
 
-  const toggleComplete = useCallback((id: string) => {
+  const toggleComplete = useCallback(async (id: string) => {
     // Training events are ephemeral (derived) — mark them done for today only.
     if (id.startsWith('training-')) {
       const today = new Date().toISOString().slice(0, 10);
@@ -197,12 +220,29 @@ export function useAgenda() {
       });
       return;
     }
+
+    if (!user) return;
+    
+    // Manual events - update in Supabase
+    const target = manualEvents.find(e => e.id === id);
+    if (!target) return;
+    
+    const newStatus = target.completed ? 'pending' : 'done';
+    
+    // Update local immediately for responsive UI
     setManualEvents((prev) =>
       prev.map((e) => (e.id === id ? { ...e, completed: !e.completed } : e))
     );
-  }, []);
+    
+    // Update DB
+    await supabase.from('agenda_events').update({ status: newStatus }).eq('id', id);
+    
+  }, [manualEvents, user]);
 
-  const updateEvent = useCallback((id: string, data: Partial<CreateInput>) => {
+  const updateEvent = useCallback(async (id: string, data: Partial<CreateInput>) => {
+    if (!user) return;
+    
+    // Local Update
     setManualEvents((prev) =>
       prev.map((e) =>
         e.id === id
@@ -218,7 +258,18 @@ export function useAgenda() {
           : e,
       ),
     );
-  }, []);
+    
+    // DB Update
+    const patch: any = {};
+    if ('name' in data) patch.title = data.name!.trim();
+    if ('category' in data) patch.category = data.category;
+    if ('date' in data) patch.event_date = data.date;
+    if ('time' in data) patch.event_time = data.time || null;
+    if ('description' in data) patch.description = data.description?.trim() || null;
+    if ('recurrence' in data) patch.recurrence = data.recurrence;
+    
+    await supabase.from('agenda_events').update(patch).eq('id', id);
+  }, [user]);
 
   const deleteEvent = useCallback(async (id: string) => {
     const target = manualEvents.find((e) => e.id === id);
@@ -229,9 +280,11 @@ export function useAgenda() {
         setGoogleError(err instanceof Error ? err.message : 'Falha ao remover do Google');
       }
     }
+    
     setManualEvents((prev) => prev.filter((e) => e.id !== id));
+    if (user) await supabase.from('agenda_events').delete().eq('id', id);
     if (target?.googleCalendarId) syncGoogleEvents();
-  }, [manualEvents, googleSession, syncGoogleEvents]);
+  }, [manualEvents, googleSession, syncGoogleEvents, user]);
 
   // Missions no longer appear in the Agenda — they live in the "Missões Diárias" section.
   const derivedMissionEvents = useMemo<AgendaEvent[]>(() => [], []);

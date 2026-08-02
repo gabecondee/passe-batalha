@@ -89,12 +89,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch Profile Progression
       const { data: profile } = await supabase
         .from('profiles')
-        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial')
+        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial, onboarding_completed, name, last_seen_level')
         .eq('id', authUser.id)
         .single();
         
       if (profile) {
         setEnergyOverride(profile.energy ?? 100);
+        setHasCompletedOnboarding(!!profile.onboarding_completed);
+        if (profile.name) setCustomName(profile.name);
+        setLastKnownLevel(profile.last_seen_level ?? 1);
         setAttributeXpBonus({
           physical: profile.xp_physical ?? 0,
           mental: profile.xp_mental ?? 0,
@@ -165,12 +168,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [customAvatar, setCustomAvatar] = useState<string | null>(() => {
     return localStorage.getItem('user_avatar');
   });
-  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(() => {
-    return localStorage.getItem('onboarding_completed') === 'true';
-  });
-  const [customName, setCustomName] = useState<string | null>(() => {
-    return localStorage.getItem('user_name');
-  });
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [customName, setCustomName] = useState<string | null>(null);
   const [levelUpData, setLevelUpData] = useState<{ level: number; show: boolean }>({ level: 1, show: false });
   const [lastKnownLevel, setLastKnownLevel] = useState<number | null>(null);
 
@@ -195,8 +194,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setCustomName(data.name);
     if (data.avatar) setCustomAvatar(data.avatar);
     setHasCompletedOnboarding(true);
-    localStorage.setItem('onboarding_completed', 'true');
-    localStorage.setItem('user_name', data.name);
+    // localStorage.setItem('user_name', data.name);
     if (data.avatar) localStorage.setItem('user_avatar', data.avatar);
 
     // Do NOT seed a check-in on onboarding completion — the first daily login
@@ -302,21 +300,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
 
   // Detect level-up by comparing to last known level
-  const prevLevelRef = useRef<number | null>(null);
   useEffect(() => {
-    if (prevLevelRef.current === null) {
-      prevLevelRef.current = user.level;
-      return;
-    }
-    if (user.level > prevLevelRef.current) {
+    if (lastKnownLevel === null) return;
+    if (user.level > lastKnownLevel) {
       setLevelUpData({ level: user.level, show: true });
     }
-    prevLevelRef.current = user.level;
-  }, [user.level]);
+  }, [user.level, lastKnownLevel]);
 
-  const dismissLevelUp = useCallback(() => {
+  const dismissLevelUp = useCallback(async () => {
+    const currentLevel = levelUpData.level;
     setLevelUpData(prev => ({ ...prev, show: false }));
-  }, []);
+    setLastKnownLevel(currentLevel);
+    if (authUser) {
+      await supabase.from('profiles').update({ last_seen_level: currentLevel }).eq('id', authUser.id);
+    }
+  }, [levelUpData.level, authUser]);
 
   // Skill actions
 

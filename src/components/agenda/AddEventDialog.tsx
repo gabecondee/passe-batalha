@@ -6,8 +6,12 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
-import { Plus, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { Plus, Trash2, CalendarIcon } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { AGENDA_CATEGORIES, AgendaCategory, AgendaEvent, AgendaRecurrence } from '@/types/agenda';
 
@@ -176,9 +180,30 @@ export function AddEventDialog({
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 flex flex-col">
               <Label htmlFor="evt-date">Data</Label>
-              <Input id="evt-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant={"outline"}
+                    className={cn(
+                      "w-full justify-start text-left font-normal border-border/50 bg-background hover:bg-muted/50 hover:text-foreground",
+                      !date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {date ? format(parseISO(date), "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 z-[100]" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={date ? parseISO(date) : undefined}
+                    onSelect={(d) => d && setDate(format(d, 'yyyy-MM-dd'))}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="evt-time">Horário</Label>

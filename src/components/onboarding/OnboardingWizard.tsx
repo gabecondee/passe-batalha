@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronRight, Upload, RefreshCw, Check, Loader2, Shield, Camera, Plus, Dumbbell, Brain, Sparkle, Briefcase, DollarSign, ArrowLeft, Mail, Lock } from 'lucide-react';
+import { Sparkles, ChevronRight, Upload, RefreshCw, Check, Loader2, Shield, Camera, Plus, Dumbbell, Brain, Sparkle, Briefcase, DollarSign, ArrowLeft, Mail, Lock, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -12,10 +12,9 @@ import hakimImage from '@/assets/hakim-mascot.png';
 import hakimV2 from '@/assets/hakim-mascot-v2.jpeg';
 import hakimV3 from '@/assets/hakim-mascot-v3.jpeg';
 import hakimOwlRunesAsset from '@/assets/hakim-owl-runes.png.asset.json';
-import hakim01Asset from '@/assets/hakim-01.png.asset.json';
-import hakim03Asset from '@/assets/hakim-03-v2.png.asset.json';
-import hakim02Asset from '@/assets/hakim-02.png.asset.json';
-import starLogoAsset from '@/assets/star-logo.png.asset.json';
+import hakim2 from '@/assets/hakim2.png';
+
+import logoSrc from '@/assets/logo.png';
 import hakimOwlMentor from '@/assets/hakim-owl-mentor.png';
 import hakimOwlSkills from '@/assets/hakim-owl-skills.png';
 import hakimOwlSummary from '@/assets/hakim-owl-summary.png';
@@ -79,6 +78,25 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   });
   const [skillIdx, setSkillIdx] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
 
   const variants = {
     enter: { opacity: 0, x: 40 },
@@ -97,6 +115,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     setGenerating(true);
     setGeneratedAvatar(null);
     try {
+      // API call to Edge Function commented out to bypass AI temporarily
+      /*
       const { data, error } = await supabase.functions.invoke('generate-avatar', {
         body: { photoBase64, className: chosenClass },
       });
@@ -106,6 +126,13 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       } else {
         throw new Error(data?.error || 'Falha ao gerar avatar');
       }
+      */
+      
+      // Temporary AI Bypass using DiceBear
+      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate loading
+      const randomUrl = `https://api.dicebear.com/9.x/adventurer/svg?seed=${Date.now()}`;
+      setGeneratedAvatar(randomUrl);
+
     } catch (e: any) {
       toast.error('Erro ao gerar avatar: ' + (e?.message || e));
     } finally {
@@ -114,20 +141,39 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   };
 
   const finishOnboarding = async () => {
-    localStorage.setItem('user_class', chosenClass || '');
-    localStorage.setItem('initial_skills', JSON.stringify(skillValues));
+    // localStorage.setItem('user_class', chosenClass || '');
+    // localStorage.setItem('initial_skills', JSON.stringify(skillValues));
 
     const { data: authData } = await authService.getUser();
     
     if (authData?.user) {
-      const { error } = await supabase.from('profiles').update({
+      // Atualizar ou Inserir o profile com nome, classe, avatar e onboarding_completed
+      const { error: profileError } = await supabase.from('profiles').upsert({
+        id: authData.user.id,
         name: name.trim(),
-        avatar: generatedAvatar || '/placeholder.svg'
-      }).eq('id', authData.user.id);
+        class: chosenClass,
+        avatar_url: generatedAvatar || '/placeholder.svg',
+        onboarding_completed: true
+      });
 
-      if (error) {
-        toast.error('Aviso: Não foi possível sincronizar o perfil com a nuvem.');
-        console.error('Erro Supabase (Profile Update):', error);
+      if (profileError) {
+        toast.error('Aviso: Não foi possível atualizar o perfil.');
+        console.error('Erro Supabase (Profile Update):', profileError);
+      }
+
+      // Inserir os atributos iniciais na tabela user_attributes
+      const { error: attrError } = await supabase.from('user_attributes').upsert({
+        user_id: authData.user.id,
+        initial_xp: skillValues,
+        physical_xp: 0,
+        mental_xp: 0,
+        spiritual_xp: 0,
+        professional_xp: 0,
+        financial_xp: 0
+      }, { onConflict: 'user_id' });
+
+      if (attrError) {
+        console.error('Erro Supabase (Attributes Upsert):', attrError);
       }
     }
 
@@ -163,15 +209,15 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       
       toast.success('Bem-vindo de volta, guerreiro!');
       
-      const hasCompleted = localStorage.getItem('onboarding_completed') === 'true';
-      if (hasCompleted) {
-        onComplete({ 
-          name: localStorage.getItem('user_name') || 'Guerreiro', 
-          avatar: localStorage.getItem('user_avatar') 
-        });
-      } else {
+      // O Index.tsx vai escutar a mudança do usuário pelo AuthContext e verificar 
+      // no banco se o onboarding já foi feito. Se sim, ele unmounta este componente
+      // e renderiza o Dashboard.
+      
+      // Se não houver redirecionamento, assumimos que o onboarding está pendente
+      // e vamos para a tela de introdução.
+      setTimeout(() => {
         setScreen('meet');
-      }
+      }, 1000);
     }
   };
 
@@ -212,9 +258,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                       className="mb-4"
                     >
                       <img
-                        src={starLogoAsset.url}
-                        alt="Estrela"
-                        className="w-[120px] h-[120px] object-contain drop-shadow-[0_0_25px_rgba(245,158,11,0.7)]"
+                        src={logoSrc}
+                        alt="Passe de Batalha"
+                        className="w-[120px] h-[120px] object-contain drop-shadow-[0_0_25px_rgba(245,158,11,0.7)] rounded-full"
                       />
                     </motion.div>
                     <div
@@ -284,9 +330,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                       className="mb-6"
                     >
                       <img
-                        src={starLogoAsset.url}
-                        alt="Estrela"
-                        className="w-[90px] h-[90px] object-contain drop-shadow-[0_0_25px_rgba(245,158,11,0.7)]"
+                        src={logoSrc}
+                        alt="Passe de Batalha"
+                        className="w-[90px] h-[90px] object-contain drop-shadow-[0_0_25px_rgba(245,158,11,0.7)] rounded-full"
                       />
                     </motion.div>
 
@@ -348,13 +394,55 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         {loginMode === 'firstAccess' ? 'CRIAR CONTA' : 'ENTRAR'}
                       </Button>
 
-                      <button
-                        type="button"
-                        className="text-blue-400/90 hover:text-blue-300 text-xs tracking-[0.22em] uppercase font-semibold transition mt-2"
-                        style={{ fontFamily: 'Inter, sans-serif' }}
-                      >
-                        Esqueci minha senha
-                      </button>
+                      {loginMode === 'firstAccess' ? (
+                        <div className="mt-4 text-center">
+                          <span className="text-slate-400 text-sm">Já tem conta? </span>
+                          <button
+                            type="button"
+                            onClick={() => setLoginMode('returning')}
+                            className="text-amber-400 hover:text-amber-300 font-semibold transition"
+                          >
+                            Faça Login
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="mt-4 flex flex-col items-center gap-4">
+                          <button
+                            type="button"
+                            className="text-slate-400 hover:text-slate-300 text-xs tracking-wider transition"
+                            style={{ fontFamily: 'Inter, sans-serif' }}
+                          >
+                            Esqueci minha senha
+                          </button>
+                          <div className="text-center">
+                            <span className="text-slate-400 text-sm">Ainda não tem conta? </span>
+                            <button
+                              type="button"
+                              onClick={() => setLoginMode('firstAccess')}
+                              className="text-amber-400 hover:text-amber-300 font-semibold transition"
+                            >
+                              Criar conta
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="w-full pt-4 mt-2 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (deferredPrompt) {
+                              handleInstallClick();
+                            } else {
+                              toast('App já instalado ou navegador não suporta PWA no momento.');
+                            }
+                          }}
+                          className="flex items-center gap-2 text-slate-500 hover:text-amber-400 text-xs font-semibold tracking-wider transition-colors uppercase"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          Instalar App
+                        </button>
+                      </div>
                     </form>
                   </motion.div>
                 )}
@@ -383,7 +471,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
             <div className="flex-none w-full flex items-start justify-center pt-0">
               <img
-                src={hakim01Asset.url}
+                src={hakim2}
                 alt="Hakim, o mentor coruja"
                 className="w-full max-w-[460px] h-auto max-h-[52vh] object-contain drop-shadow-[0_0_40px_rgba(59,130,246,0.35)]"
               />
@@ -419,7 +507,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
             <div className="flex-none w-full flex items-start justify-center pt-0">
               <img
-                src={hakim02Asset.url}
+                src={hakim2}
                 alt="Hakim, o mentor coruja"
                 className="w-full max-w-[460px] h-auto max-h-[52vh] object-contain drop-shadow-[0_0_40px_rgba(59,130,246,0.35)]"
               />
@@ -470,7 +558,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             <div className="relative z-10 w-full px-6 mt-2 grid grid-cols-[42%_1fr] gap-3 items-center">
               <div className="relative">
                 <img
-                  src={hakim03Asset.url}
+                  src={hakim2}
                   alt="Hakim, o mentor coruja"
                   aria-hidden
                   className="w-full h-auto object-contain object-top pointer-events-none select-none"
@@ -732,7 +820,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               aria-hidden
               className="pointer-events-none absolute top-20 -left-4 w-[50%] max-w-[250px] aspect-[3/4] z-0"
               style={{
-                backgroundImage: `url(${hakim03Asset.url})`,
+                backgroundImage: `url(${hakim2})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'right center',
                 WebkitMaskImage:

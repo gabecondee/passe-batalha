@@ -310,8 +310,12 @@ export default function Agenda() {
               {monthDays.map((d) => {
                 const inMonth = isSameMonth(d, monthCursor);
                 const isCurrent = isToday(d);
+                
+                // Get events for this specific day
+                const dayEvents = eventsByDate(d);
+                const hasEvents = dayEvents.length > 0;
+                
                 return (
-
                   <button
                     key={d.toISOString()}
                     onClick={() => {
@@ -319,7 +323,7 @@ export default function Agenda() {
                       setTodayOpen(true);
                     }}
                     className={cn(
-                      'relative aspect-square rounded-xl border text-sm transition-all flex items-center justify-center',
+                      'relative aspect-square rounded-xl border text-sm transition-all flex flex-col items-center justify-center',
                       inMonth
                         ? 'text-foreground border-border/40 bg-secondary/20 hover:border-primary/40'
                         : 'text-muted-foreground/30 border-transparent bg-transparent',
@@ -335,7 +339,15 @@ export default function Agenda() {
                         'border-primary text-primary bg-primary/10 shadow-[0_0_12px_hsl(var(--primary)/0.4)]',
                     )}
                   >
-                    <span className="font-display">{format(d, 'd')}</span>
+                    <span className={cn("font-display", hasEvents && "mb-1")}>{format(d, 'd')}</span>
+                    {hasEvents && inMonth && (
+                      <span className="absolute bottom-1.5 flex gap-0.5">
+                        <span className={cn(
+                          "w-1 h-1 rounded-full",
+                          overdueDayKeys.has(format(d, 'yyyy-MM-dd')) ? "bg-red-400" : "bg-primary"
+                        )} />
+                      </span>
+                    )}
                   </button>
                 );
               })}

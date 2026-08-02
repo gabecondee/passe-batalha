@@ -10,14 +10,13 @@ import { toast } from 'sonner';
 import { SkillsRadar } from '@/components/dashboard/SkillsRadar';
 import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
-import { useAchievements } from '@/hooks/useAchievements';
 import { useAgenda } from '@/hooks/useAgenda';
 import { WeekDay } from '@/types/game';
 import { XP_PER_ACTION } from '@/lib/missionRewards';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap, Flame, Star, Shield, Trophy, Swords, ChevronRight,
-  Target, Calendar as CalendarIcon, Skull, Check, ShoppingCart, Gem, X,
+  Target, Calendar as CalendarIcon, Skull, Check, ShoppingCart, Gem, X, User
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStreakReward, addFragments } from '@/hooks/useStreakReward';
@@ -57,7 +56,6 @@ function getEnergySolid(level: number): string {
 export default function Dashboard() {
   const { user, missions, attributes, completeMission, completeDailyAction } = useGame();
   const { getActiveBattles, getTodayBossAction, recordDayAction, getProgress } = useBoss();
-  const { streak } = useAchievements();
   const { state: streakRewardState } = useStreakReward();
   const { eventsByDate, toggleComplete } = useAgenda();
   const navigate = useNavigate();
@@ -103,7 +101,7 @@ export default function Dashboard() {
   const dailyMissions = allDailyMissions.filter((m) => !(m.completedDates ?? []).includes(todayISO));
 
   const activeBattles = getActiveBattles();
-  const currentStreak = streak?.current_streak ?? 0;
+  const currentStreak = streakRewardState.streak_days ?? 0;
 
   const todayEvents = eventsByDate(new Date());
   const pendingTodayEvents = todayEvents.filter((e) => !e.completed);
@@ -170,12 +168,18 @@ export default function Dashboard() {
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-32 h-32 rounded-full overflow-hidden border-2 border-cyan-400/50 bg-card shadow-[0_0_25px_rgba(34,211,238,0.3)]">
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-full h-full object-cover"
-                  style={{ objectPosition: 'center 12%', transform: 'scale(1.3)', transformOrigin: 'center 20%' }}
-                />
+                {(!user.avatar || user.avatar.includes('placeholder.svg')) ? (
+                  <div className="w-full h-full bg-[#050b14] flex items-center justify-center">
+                    <User className="w-14 h-14 text-cyan-500/50" />
+                  </div>
+                ) : (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="w-full h-full object-cover"
+                    style={{ objectPosition: 'center 12%', transform: 'scale(1.3)', transformOrigin: 'center 20%' }}
+                  />
+                )}
               </div>
             </div>
           </div>

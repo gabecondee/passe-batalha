@@ -8,12 +8,9 @@ import { emit, useBusEvent } from '@/lib/eventBus';
 import { ranking as mockRanking } from '@/data/mockData';
 import { getLevelInfo } from '@/lib/leveling';
 
-const SEEN_KEY = 'achievements-seen-v1';
-export const ACHIEVEMENTS_ENABLED_KEY = 'achievements-enabled-v1';
-export function areAchievementsEnabled(): boolean {
-  try { return localStorage.getItem(ACHIEVEMENTS_ENABLED_KEY) !== 'false'; } catch { return true; }
-}
-const UNLOCKED_AT_KEY = 'achievements-unlocked-at-v1';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
+
 const AREA_TO_ATTR: Record<string, 'physical' | 'mental' | 'spiritual' | 'professional' | 'financial'> = {
   'Física': 'physical',
   'Mental': 'mental',
@@ -28,40 +25,95 @@ export interface AchievementStatus extends AchievementDef {
   target: number;
   progress: number; // 0-100
   unlockedAt?: string;
+  notified?: boolean;
 }
-
-function readSeen(): string[] {
-  try {
-    return JSON.parse(localStorage.getItem(SEEN_KEY) || '[]');
-  } catch { return []; }
-}
-function writeSeen(ids: string[]) {
-  try { localStorage.setItem(SEEN_KEY, JSON.stringify(ids)); } catch { /**/ }
-}
-function readUnlockedAt(): Record<string, string> {
-  try { return JSON.parse(localStorage.getItem(UNLOCKED_AT_KEY) || '{}'); } catch { return {}; }
-}
-function writeUnlockedAt(map: Record<string, string>) {
-  try { localStorage.setItem(UNLOCKED_AT_KEY, JSON.stringify(map)); } catch { /**/ }
-}
-
-function readCounter(key: string): number {
-  return Number(localStorage.getItem(key) || 0);
-}
-
 
 export function useAchievementsData() {
+  const { user: authUser } = useAuth();
   const { user, attributes, missions, hasCompletedOnboarding, addAttributeXp } = useGame();
   const { bosses, battles } = useBoss();
   const { transactions } = useFinances();
   const { state: streak } = useStreakReward();
 
-  const [seen, setSeen] = useState<string[]>(readSeen);
   const [popup, setPopup] = useState<AchievementStatus | null>(null);
   const [popupQueue, setPopupQueue] = useState<AchievementStatus[]>([]);
-  // Bump counter to force stat re-eval when external events fire (journal/meal/workout/finance).
+  
+  const [unlockedMap, setUnlockedMap] = useState<Record<string, { date: string, notified: boolean }>>({});
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [dbStats, setDbStats] = useState({
+    trainings_completed: 0,
+    diet_plans_created: 0,
+    journal_entries: 0,
+    seasons_won: 0,
+  });
+
   const [tick, setTick] = useState(0);
-  useBusEvent(useCallback((e) => {
+
+  // Fetch initial data
+  useEffect(() => {
+    if (!authUser) {
+      setIsLoaded(false);
+      return;
+    }
+    const fetchDb = async () => {
+      const [statsRes, achRes] = await Promise.all([
+        supabase.from('user_stats').select('*').eq('user_id', authUser.id).maybeSingle(),
+        supabase.from('user_achievements').select('*').eq('user_id', authUser.id)
+      ]);
+      
+      if (statsRes.data) {
+        setDbStats({
+          trainings_completed: statsRes.data.trainings_completed || 0,
+          diet_plans_created: statsRes.data.diet_plans_created || 0,
+          journal_entries: statsRes.data.journal_entries || 0,
+          seasons_won: statsRes.data.seasons_won || 0,
+        });
+      }
+      
+      if (achRes.data) {
+        const map: Record<string, { date: string, notified: boolean }> = {};
+        achRes.data.forEach(a => {
+          map[a.achievement_id] = { 
+            date: a.unlocked_at || new Date().toISOString(), 
+            notified: !!a.notified 
+          };
+        });
+        setUnlockedMap(map);
+      }
+      setIsLoaded(true);
+    };
+    fetchDb();
+  }, [authUser]);
+
+  useBusEvent(useCallback(async (e) => {
+    if (!authUser) return;
+    
+    // Regra inegociável 3: Atualizar contador no Supabase antes de reavaliar
+    if (e.type === 'workout:completed') {
+      setDbStats(prev => {
+        const next = { ...prev, trainings_completed: prev.trainings_completed + 1 };
+        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        return next;
+      });
+    }
+    
+    if (e.type === 'journal:entry-added') {
+      setDbStats(prev => {
+        const next = { ...prev, journal_entries: prev.journal_entries + 1 };
+        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        return next;
+      });
+    }
+
+    if (e.type === 'journal:entry-deleted') {
+      setDbStats(prev => {
+        const next = { ...prev, journal_entries: Math.max(0, prev.journal_entries - 1) };
+        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        return next;
+      });
+    }
+
+    // Trigger re-evaluation
     if (
       e.type === 'journal:entry-added' ||
       e.type === 'journal:entry-deleted' ||
@@ -69,11 +121,12 @@ export function useAchievementsData() {
       e.type === 'workout:completed' ||
       e.type === 'finance:changed' ||
       e.type === 'xp:gained' ||
-      e.type === 'fragments:changed'
+      e.type === 'fragments:changed' ||
+      (e.type as string) === 'diet:plan-created'
     ) {
       setTick((t) => t + 1);
     }
-  }, []));
+  }, [authUser]));
 
   const stats = useMemo(() => {
     const areaXp: Record<string, number> = {
@@ -140,55 +193,94 @@ export function useAchievementsData() {
       investments: transactions
         .filter(t => t.type === 'investment')
         .reduce((s, t) => s + t.amount, 0),
-      trainings: readCounter('trainings_completed'),
-      dietPlansCreated: readCounter('diet_plans_created_count'),
-      journal: readCounter('journal_entries_count'),
+      trainings: dbStats.trainings_completed,
+      dietPlansCreated: dbStats.diet_plans_created,
+      journal: dbStats.journal_entries,
       onboarding: hasCompletedOnboarding ? 1 : 0,
       areaXp,
       userRank,
-      seasonsWon: readCounter('seasons_won'),
+      seasonsWon: dbStats.seasons_won,
       purchasedItems,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, attributes, missions, bosses, battles, transactions, streak, hasCompletedOnboarding, tick]);
 
   const achievements = useMemo<AchievementStatus[]>(() => {
-    const unlockedAt = readUnlockedAt();
-    const enabled = areAchievementsEnabled();
     return ALL_ACHIEVEMENTS.map(a => {
+      const alreadyUnlockedInfo = unlockedMap[a.id];
+      const alreadyUnlocked = !!alreadyUnlockedInfo;
       const { current, target } = evaluateRequirement(a.requirement, stats);
-      const alreadyUnlocked = !!unlockedAt[a.id];
-      const unlocked = enabled ? current >= target : alreadyUnlocked;
+      const unlocked = current >= target || alreadyUnlocked;
       const progress = target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0;
-      return { ...a, unlocked, current, target, progress, unlockedAt: unlockedAt[a.id] };
+      return { 
+        ...a, 
+        unlocked, 
+        current, 
+        target, 
+        progress, 
+        unlockedAt: alreadyUnlockedInfo?.date,
+        notified: alreadyUnlockedInfo?.notified 
+      };
     });
-  }, [stats]);
+  }, [stats, unlockedMap]);
 
-  // Detect newly unlocked achievements + credit XP (guarded via localStorage)
+  // Regra inegociável 2: Desbloqueio e Recompensas via Supabase + addAttributeXp
   useEffect(() => {
-    if (!areAchievementsEnabled()) return;
-    const stored = new Set(readSeen());
-    const unlockedIds = achievements.filter(a => a.unlocked).map(a => a.id);
-    const newly = unlockedIds.filter(id => !stored.has(id));
-    if (newly.length > 0) {
-      const items = achievements.filter(a => newly.includes(a.id));
-      const nextSeen = [...stored, ...newly];
-      writeSeen(nextSeen);
-      const unlockedAtMap = readUnlockedAt();
+    if (!authUser || !isLoaded) return; // Guard clause de autenticação e sincronia
+    
+    // Filter unlocked items
+    const unlockedItems = achievements.filter(a => a.unlocked);
+    
+    // 1. Brand new unlocks (not in map yet)
+    const brandNewItems = unlockedItems.filter(a => !unlockedMap[a.id]);
+    
+    // 2. Unlocked previously but not notified
+    const unnotifiedItems = unlockedItems.filter(a => unlockedMap[a.id] && !unlockedMap[a.id].notified);
+
+    if (brandNewItems.length > 0) {
       const now = new Date().toISOString();
-      newly.forEach(id => { if (!unlockedAtMap[id]) unlockedAtMap[id] = now; });
-      writeUnlockedAt(unlockedAtMap);
-      items.forEach((a) => {
-        const attr = AREA_TO_ATTR[a.area];
-        if (attr && a.xp > 0) {
-          try { addAttributeXp(attr, a.xp); } catch { /* ignore */ }
+      const newMap = { ...unlockedMap };
+      
+      brandNewItems.forEach(a => { newMap[a.id] = { date: now, notified: false }; });
+      setUnlockedMap(newMap);
+
+      // Fallback storage para caso o BD falhe em atualizar o notified
+      const localNotified = JSON.parse(localStorage.getItem('local_notified_achievements') || '[]');
+
+      brandNewItems.forEach(async (a) => {
+        const { error } = await supabase.from('user_achievements').upsert({
+          user_id: authUser.id,
+          achievement_id: a.id,
+          unlocked_at: now,
+          notified: false
+        }, { onConflict: 'user_id,achievement_id', ignoreDuplicates: true });
+        
+        if (!error) {
+          const attr = AREA_TO_ATTR[a.area];
+          if (attr && a.xp > 0) {
+            try { addAttributeXp(attr, a.xp); } catch { /* ignore */ }
+          }
+          emit({ type: 'achievement:unlocked', achievementId: a.id });
         }
-        emit({ type: 'achievement:unlocked', achievementId: a.id });
       });
-      setPopupQueue(prev => [...prev, ...items]);
-      setSeen(nextSeen);
+      
+      brandNewItems.forEach(item => {
+        if (!item.notified) {
+          queue.push(item.achievement_id);
+        }
+      });
     }
-  }, [achievements, addAttributeXp]);
+
+    if (unnotifiedItems.length > 0) {
+      // Já estão no DB, apenas enfileirar para popup
+      setPopupQueue(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const toAdd = unnotifiedItems.filter(a => !existingIds.has(a.id));
+        return [...prev, ...toAdd];
+      });
+    }
+    
+  }, [achievements, addAttributeXp, unlockedMap, authUser]);
 
 
   useEffect(() => {

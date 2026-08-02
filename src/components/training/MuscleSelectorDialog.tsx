@@ -37,7 +37,7 @@ export function MuscleSelectorDialog({
         <DialogOverlay className="bg-background/85 backdrop-blur-sm" />
         <DialogPrimitive.Content
           className={cn(
-            'fixed inset-0 z-50 flex flex-col',
+            'fixed inset-0 sm:left-1/2 sm:right-auto sm:w-full sm:max-w-md sm:-translate-x-1/2 sm:border-x sm:border-border/10 z-50 flex flex-col',
             'bg-gradient-to-b from-background via-background to-[hsl(220_30%_3%)]',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',
             'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
@@ -58,7 +58,7 @@ export function MuscleSelectorDialog({
 
           {/* Grid */}
           <div className="flex-1 overflow-y-auto px-4 pb-32 pt-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {MUSCLES.map((m) => {
                 const active = local.includes(m.id);
                 return (

@@ -39,8 +39,6 @@ import Achievements from "./pages/Achievements";
 import Journal from "./pages/Journal";
 import NotFound from "./pages/NotFound";
 import OnboardingPreview from "./pages/OnboardingPreview";
-import TestAuth from "./pages/TestAuth";
-
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -54,8 +52,7 @@ const App = () => (
             <Sonner />
             <BrowserRouter>
               <Routes>
-              <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-              <Route path="/test-auth" element={<TestAuth />} />
+              <Route path="/" element={<Index />} />
               <Route path="/onboarding-preview" element={<OnboardingPreview />} />
               <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
               <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />

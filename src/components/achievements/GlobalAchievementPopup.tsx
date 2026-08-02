@@ -2,6 +2,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X, Sparkles, Star } from 'lucide-react';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
 import { useGame } from '@/contexts/GameContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/integrations/supabase/client';
 import { RARITY_META } from '@/data/achievementsData';
 import { cn } from '@/lib/utils';
 
@@ -12,9 +14,22 @@ import { cn } from '@/lib/utils';
 export function GlobalAchievementPopup() {
   const { popup, dismissPopup } = useAchievementsData();
   const { hasCompletedOnboarding } = useGame();
+  const { user } = useAuth();
 
   if (!hasCompletedOnboarding) return null;
 
+  const handleDismiss = async () => {
+    if (popup && user) {
+      // Ignore errors silently as this is just a notification flag
+      supabase
+        .from('user_achievements')
+        .update({ notified: true })
+        .eq('user_id', user.id)
+        .eq('achievement_id', popup.id)
+        .then();
+    }
+    dismissPopup();
+  };
 
   return (
     <AnimatePresence>
@@ -22,7 +37,7 @@ export function GlobalAchievementPopup() {
         <motion.div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          onClick={dismissPopup}
+          onClick={handleDismiss}
         >
           <motion.div
             initial={{ scale: 0.7, y: 30, opacity: 0 }}
@@ -36,7 +51,7 @@ export function GlobalAchievementPopup() {
             )}
             style={{ borderColor: RARITY_META[popup.rarity].colorHex }}
           >
-            <button onClick={dismissPopup} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
+            <button onClick={handleDismiss} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
               <X className="w-4 h-4" />
             </button>
             <div className="flex items-center justify-center gap-2 mb-2">
@@ -106,8 +121,8 @@ export function GlobalAchievementPopup() {
             </div>
 
             <button
-              onClick={dismissPopup}
-              className="mt-6 w-full py-2.5 rounded-lg font-semibold text-sm border-2 hover:brightness-125 transition"
+                onClick={handleDismiss}
+                className="mt-6 w-full py-2.5 rounded-lg font-semibold text-sm border-2 hover:brightness-125 transition"
               style={{
                 borderColor: RARITY_META[popup.rarity].colorHex,
                 color: RARITY_META[popup.rarity].colorHex,

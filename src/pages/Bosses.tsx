@@ -4,7 +4,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
 import { difficultyLabels, difficultyColors } from '@/types/boss';
 import { cn } from '@/lib/utils';
-import { Skull, Trophy, XCircle, Star, ChevronRight, Lock, Plus, ScrollText, LayoutGrid, Trash2 } from 'lucide-react';
+import { Skull, Trophy, XCircle, Star, ChevronRight, Lock, Plus, ScrollText, LayoutGrid, Trash2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -81,8 +81,12 @@ export default function Bosses() {
               <ScrollText className="w-4 h-4" />
             </button>
             <div className="flex items-start gap-4 pr-10">
-              <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-amber-400/60 shrink-0 bg-muted shadow-[0_0_20px_rgba(245,158,11,0.25)]">
-                <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+              <div className="w-24 h-24 rounded-xl overflow-hidden border-2 border-amber-400/60 shrink-0 bg-[#050b14] flex items-center justify-center shadow-[0_0_20px_rgba(245,158,11,0.25)]">
+                {(!user.avatar || user.avatar.includes('placeholder.svg')) ? (
+                  <User className="w-10 h-10 text-amber-500/50" />
+                ) : (
+                  <img src={user.avatar} alt={user.name} className="w-full h-full object-cover" />
+                )}
               </div>
               <div className="flex-1 min-w-0 space-y-2">
                 <p className="font-display text-2xl tracking-wider truncate">{user.name}</p>

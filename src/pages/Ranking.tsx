@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, Users, Globe, Crown, Medal, Award, User as UserIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
-import { ranking, currentUser } from '@/data/mockData';
 import { useGame } from '@/contexts/GameContext';
 import { getLevelInfo } from '@/lib/leveling';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
 
 type Period = '7d' | '30d' | 'all';
 
@@ -17,35 +17,52 @@ const PERIODS: { key: Period; label: string }[] = [
 
 export default function Ranking() {
   const { user } = useGame();
-  const [period, setPeriod] = useState<Period>('7d');
+  const [period, setPeriod] = useState<Period>('all');
+  const [rawRanking, setRawRanking] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function fetchRanking() {
+      const { data } = await supabase.from('global_ranking').select('*');
+      if (data) {
+        setRawRanking(data);
+      }
+    }
+    fetchRanking();
+  }, []);
 
   const fullRanking = useMemo(() => {
-    const base = ranking.some((u) => u.id === user.id)
-      ? ranking
+    const base = rawRanking.some((u) => u.id === user.id)
+      ? rawRanking
       : [
-          ...ranking,
+          ...rawRanking,
           {
             id: user.id,
             name: user.name,
             avatar: user.avatar,
-            level: user.level,
-            totalXP: user.totalXP,
-            rank: 0,
+            created_at: new Date().toISOString(),
+            total_xp: user.totalXP,
             streak: 0,
           },
         ];
 
     return base
-      .map((u) => ({ ...u, level: getLevelInfo(u.totalXP).level }))
+      .map((u) => ({ ...u, level: getLevelInfo(u.total_xp || 0).level }))
       .sort((a, b) => {
-        if (b.totalXP !== a.totalXP) return b.totalXP - a.totalXP;
-        if ((b.streak ?? 0) !== (a.streak ?? 0)) return (b.streak ?? 0) - (a.streak ?? 0);
-        return (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
+        // Regra inegociável 1: Algoritmo de ordenação (XP -> Streak -> CreatedAt)
+        const xpA = a.total_xp || 0;
+        const xpB = b.total_xp || 0;
+        if (xpB !== xpA) return xpB - xpA;
+        
+        const streakA = a.streak || 0;
+        const streakB = b.streak || 0;
+        if (streakB !== streakA) return streakB - streakA;
+        
+        return (a.created_at || '').localeCompare(b.created_at || '');
       })
       .map((u, i) => ({ ...u, rank: i + 1 }));
-  }, [user]);
+  }, [rawRanking, user]);
 
-  const userRank = fullRanking.find((u) => u.id === user.id)?.rank ?? currentUser.rank;
+  const userRank = fullRanking.find((u) => u.id === user.id)?.rank ?? 0;
 
   const getRankBadge = (rank: number) => {
     if (rank === 1)
@@ -272,7 +289,7 @@ export default function Ranking() {
                             u.rank <= 3 ? 'text-primary' : 'text-foreground',
                           )}
                         >
-                          {u.totalXP.toLocaleString('pt-BR')} XP
+                          {Number(u.total_xp || 0).toLocaleString('pt-BR')} XP
                         </span>
                       </div>
                     </motion.div>

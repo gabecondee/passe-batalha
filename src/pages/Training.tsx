@@ -112,16 +112,16 @@ export default function Training() {
           {/* Avatar */}
           <div className="relative shrink-0">
             <div className="h-28 w-28 md:h-32 md:w-32 overflow-hidden rounded-2xl border-2 border-primary/70 bg-secondary/60 shadow-[0_0_25px_hsl(var(--primary)/0.5)]">
-              {user.avatar ? (
+              {(!user.avatar || user.avatar.includes('placeholder.svg')) ? (
+                <div className="flex h-full w-full bg-[#050b14] items-center justify-center">
+                  <User className="h-12 w-12 text-primary/50" />
+                </div>
+              ) : (
                 <img
                   src={user.avatar}
                   alt={user.name}
                   className="h-full w-full object-cover"
                 />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center">
-                  <User className="h-12 w-12 text-primary/70" />
-                </div>
               )}
             </div>
           </div>
