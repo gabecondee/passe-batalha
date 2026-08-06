@@ -118,7 +118,7 @@ export function SkillsRadar({ attributes }: { attributes: Attribute[] }) {
           fill="rgba(34,211,238,0.18)"
           stroke="#22d3ee"
           strokeWidth={2.5}
-          initial={{ opacity: 0 }}
+          initial={{ opacity: 0, points: polygonPoints } as any}
           animate={{ opacity: 1, points: polygonPoints } as any}
           transition={{ duration: 0.6, ease: 'easeOut' }}
           style={{ filter: 'drop-shadow(0 0 8px rgba(34,211,238,0.7))' }}

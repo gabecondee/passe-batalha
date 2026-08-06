@@ -68,8 +68,7 @@ export default function Dashboard() {
 
 
 
-  const userClass = (typeof window !== 'undefined' ? localStorage.getItem('user_class') : '') || '';
-  const classLabel = CLASS_LABELS[userClass] || 'AVENTUREIRO';
+  const classLabel = user.userClass ? CLASS_LABELS[user.userClass] : 'AVENTUREIRO';
 
   const energyLevel = Math.round(user.energy / 10); // 0-10
   const maxEnergyLevel = Math.round(user.maxEnergy / 10) || 10;

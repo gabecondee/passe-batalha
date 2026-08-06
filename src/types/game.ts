@@ -18,6 +18,7 @@ export interface User {
   maxEnergy: number;
   rank: number;
   title: string;
+  userClass?: string;
 }
 
 export interface Attribute {

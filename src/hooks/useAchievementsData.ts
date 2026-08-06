@@ -264,10 +264,10 @@ export function useAchievementsData() {
         }
       });
       
-      brandNewItems.forEach(item => {
-        if (!item.notified) {
-          queue.push(item.achievement_id);
-        }
+      setPopupQueue(prev => {
+        const existingIds = new Set(prev.map(p => p.id));
+        const toAdd = brandNewItems.filter(a => !existingIds.has(a.id));
+        return [...prev, ...toAdd];
       });
     }
 

@@ -89,7 +89,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch Profile Progression
       const { data: profile } = await supabase
         .from('profiles')
-        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial, onboarding_completed, name, last_seen_level')
+        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial, onboarding_completed, name, last_seen_level, class')
         .eq('id', authUser.id)
         .single();
         
@@ -97,6 +97,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setEnergyOverride(profile.energy ?? 100);
         setHasCompletedOnboarding(!!profile.onboarding_completed);
         if (profile.name) setCustomName(profile.name);
+        if (profile.class) setUserClass(profile.class);
         setLastKnownLevel(profile.last_seen_level ?? 1);
         setAttributeXpBonus({
           physical: profile.xp_physical ?? 0,
@@ -105,6 +106,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           professional: profile.xp_professional ?? 0,
           financial: profile.xp_financial ?? 0,
         });
+      }
+
+      // 1.5 Fetch Initial Attributes (Step 6 Onboarding)
+      const { data: attrs } = await supabase
+        .from('user_attributes')
+        .select('initial_xp')
+        .eq('user_id', authUser.id)
+        .maybeSingle();
+
+      if (attrs?.initial_xp) {
+        setAttributeInitialXp(attrs.initial_xp as any);
       }
 
       // 2. Fetch Missions
@@ -141,6 +153,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
     fetchData();
   }, [authUser]);
+  const [userClass, setUserClass] = useState<string | undefined>(undefined);
   const [attributeXpBonus, setAttributeXpBonus] = useState<Record<AttributeType, number>>(() => {
     // Level always starts at 1 after the first login; XP is earned only from actions.
     return { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
@@ -179,15 +192,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toast.success('🖼️ Avatar atualizado!');
   }, []);
 
-  const completeOnboarding = useCallback((data: { name: string; avatar: string | null }) => {
+  const completeOnboarding = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => {
     // Seed initial XP baseline from onboarding choices (counts toward XP total but not level).
-    setAttributeInitialXp({
-      physical: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).physical) || 0),
-      mental: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).mental) || 0),
-      spiritual: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).spiritual) || 0),
-      professional: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).professional) || 0),
-      financial: Math.max(0, Number((JSON.parse(localStorage.getItem('initial_skills') || '{}') as any).financial) || 0),
-    });
+    if (data.initialSkills) {
+      setAttributeInitialXp({
+        physical: Math.max(0, Number(data.initialSkills.physical) || 0),
+        mental: Math.max(0, Number(data.initialSkills.mental) || 0),
+        spiritual: Math.max(0, Number(data.initialSkills.spiritual) || 0),
+        professional: Math.max(0, Number(data.initialSkills.professional) || 0),
+        financial: Math.max(0, Number(data.initialSkills.financial) || 0),
+      });
+    } else {
+      setAttributeInitialXp({ physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 });
+    }
     // Reset earned bonus so level starts at 1.
     setAttributeXpBonus({ physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 });
 
@@ -294,9 +311,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       currentXP: info.currentXP,
       xpToNextLevel: info.xpToNextLevel,
       title,
+      userClass,
       ...(energyOverride !== null ? { energy: energyOverride } : {}),
     };
-  }, [attributes, attributeInitialXp, customName, energyOverride]);
+  }, [attributes, attributeInitialXp, customName, energyOverride, userClass]);
 
 
   // Detect level-up by comparing to last known level

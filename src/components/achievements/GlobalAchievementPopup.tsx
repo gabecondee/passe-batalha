@@ -3,6 +3,7 @@ import { X, Sparkles, Star } from 'lucide-react';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
 import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useStreakReward } from '@/hooks/useStreakReward';
 import { supabase } from '@/integrations/supabase/client';
 import { RARITY_META } from '@/data/achievementsData';
 import { cn } from '@/lib/utils';
@@ -15,8 +16,13 @@ export function GlobalAchievementPopup() {
   const { popup, dismissPopup } = useAchievementsData();
   const { hasCompletedOnboarding } = useGame();
   const { user } = useAuth();
+  const { state: streakState, isLoading: isStreakLoading } = useStreakReward();
 
-  if (!hasCompletedOnboarding) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  const hasCheckedIn = streakState.last_checkin_date === today;
+
+  // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet.
+  if (!hasCompletedOnboarding || isStreakLoading || !hasCheckedIn) return null;
 
   const handleDismiss = async () => {
     if (popup && user) {

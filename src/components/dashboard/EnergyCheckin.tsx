@@ -97,7 +97,7 @@ export function EnergyCheckin() {
     
     const today = new Date().toISOString().slice(0, 10);
     if (streakState.last_checkin_date !== today) {
-      const timer = setTimeout(() => setOpen(true), 800);
+      const timer = setTimeout(() => setOpen(true), 50);
       return () => clearTimeout(timer);
     }
   }, [isLoading, streakState.last_checkin_date]);

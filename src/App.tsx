@@ -8,6 +8,7 @@ import { BossProvider } from "@/contexts/BossContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import Skills from "./pages/Skills";
 import Missions from "./pages/Missions";
@@ -50,7 +51,8 @@ const App = () => (
             <BossProvider>
             <Toaster />
             <Sonner />
-            <BrowserRouter>
+            <ErrorBoundary>
+              <BrowserRouter>
               <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/onboarding-preview" element={<OnboardingPreview />} />
@@ -85,6 +87,7 @@ const App = () => (
             </Routes>
             <GlobalAchievementPopup />
           </BrowserRouter>
+          </ErrorBoundary>
           </BossProvider>
           </GameProvider>
         </ThemeProvider>

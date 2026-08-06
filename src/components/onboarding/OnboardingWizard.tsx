@@ -38,7 +38,7 @@ const SERIF = "'Cormorant Garamond', 'Cinzel', serif";
 
 
 interface OnboardingWizardProps {
-  onComplete: (data: { name: string; avatar: string | null }) => void;
+  onComplete: (data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => void;
 }
 
 type Screen = 'start' | 'meet' | 'name' | 'class' | 'character' | 'skills' | 'summary';
@@ -164,12 +164,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       // Inserir os atributos iniciais na tabela user_attributes
       const { error: attrError } = await supabase.from('user_attributes').upsert({
         user_id: authData.user.id,
-        initial_xp: skillValues,
-        physical_xp: 0,
-        mental_xp: 0,
-        spiritual_xp: 0,
-        professional_xp: 0,
-        financial_xp: 0
+        initial_xp: skillValues
       }, { onConflict: 'user_id' });
 
       if (attrError) {
@@ -177,7 +172,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       }
     }
 
-    onComplete({ name: name.trim(), avatar: generatedAvatar });
+    onComplete({ name: name.trim(), avatar: generatedAvatar, initialSkills: skillValues });
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -197,7 +192,9 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       }
       
       toast.success('Conta criada! Vamos construir seu personagem.');
-      setScreen('meet');
+      setTimeout(() => {
+        setScreen('meet');
+      }, 500);
       
     } else {
       const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
@@ -218,6 +215,24 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       setTimeout(() => {
         setScreen('meet');
       }, 1000);
+    }
+  };
+
+  const handleBack = () => {
+    switch (screen) {
+      case 'meet': setScreen('start'); break;
+      case 'name': setScreen('meet'); break;
+      case 'class': setScreen('name'); break;
+      case 'character': setScreen('class'); break;
+      case 'skills':
+        if (skillIdx > 0) {
+          setSkillIdx(prev => prev - 1);
+        } else {
+          setScreen('character');
+        }
+        break;
+      case 'summary': setScreen('skills'); setSkillIdx(4); break;
+      default: break;
     }
   };
 
@@ -427,7 +442,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         </div>
                       )}
 
-                      <div className="w-full pt-4 mt-2 flex justify-center">
+                      <div className="w-full px-6 flex flex-col items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
@@ -539,6 +554,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               >
                 CONTINUAR <ChevronRight className="w-5 h-5 ml-2" />
               </Button>
+              <button
+                type="button"
+                onClick={handleBack}
+                className="mt-3 text-xs tracking-widest font-semibold text-slate-500 hover:text-white transition-colors uppercase"
+                style={{ fontFamily: 'Inter, sans-serif' }}
+              >
+                Voltar
+              </button>
             </div>
           </motion.div>
         )}
@@ -599,7 +622,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               onSelect={setChosenClass}
             />
 
-            <div className="w-full px-6 mt-10 flex justify-center">
+            <div className="w-full px-6 mt-10 flex flex-col items-center gap-2">
               <Button
                 onClick={() => {
                   if (!chosenClass) { toast.error('Selecione uma classe para continuar.'); return; }
@@ -611,6 +634,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               >
                 CONTINUAR <ChevronRight className="w-5 h-5 ml-2" />
               </Button>
+              <button
+                type="button"
+                onClick={handleBack}
+                className="mt-3 text-xs tracking-widest font-semibold text-slate-500 hover:text-white transition-colors uppercase"
+                style={{ fontFamily: 'Inter, sans-serif' }}
+              >
+                Voltar
+              </button>
             </div>
           </motion.div>
         )}
@@ -628,7 +659,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               aria-hidden
               className="pointer-events-none absolute top-10 right-0 w-[58%] max-w-[300px] aspect-[3/4] z-0"
               style={{
-                backgroundImage: `url(${hakimOwlMentor})`,
+                backgroundImage: `url(${hakim2})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'left center',
                 WebkitMaskImage:
@@ -738,6 +769,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
                 {/* Action buttons below the upload box */}
                 <div className="mt-8 flex flex-col items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setScreen('skills')}
+                    className="text-slate-300/80 hover:text-white text-sm transition"
+                    style={{ fontFamily: SERIF }}
+                  >
+                    Pular
+                  </button>
                   <Button
                     onClick={() => {
                       if (!photoBase64) { toast.error('Envie uma foto para continuar.'); return; }
@@ -751,11 +790,11 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   </Button>
                   <button
                     type="button"
-                    onClick={() => setScreen('skills')}
-                    className="text-slate-300/80 hover:text-white text-sm transition"
-                    style={{ fontFamily: SERIF }}
+                    onClick={handleBack}
+                    className="text-xs tracking-widest font-semibold text-slate-500 hover:text-white transition-colors uppercase"
+                    style={{ fontFamily: 'Inter, sans-serif' }}
                   >
-                    Pular
+                    Voltar
                   </button>
                 </div>
               </div>
@@ -898,7 +937,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               </div>
             </div>
 
-            <div className="fixed bottom-6 left-0 right-0 px-6 flex justify-center z-20">
+            <div className="fixed bottom-6 left-0 right-0 px-6 flex flex-col items-center gap-2 z-20">
               <Button
                 onClick={() => {
                   if (skillIdx < SKILL_CARDS.length - 1) setSkillIdx((i) => i + 1);
@@ -909,6 +948,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               >
                 {skillIdx < SKILL_CARDS.length - 1 ? 'PRÓXIMA' : 'CONTINUAR'} <ChevronRight className="w-5 h-5 ml-2" />
               </Button>
+              <button
+                type="button"
+                onClick={handleBack}
+                className="mt-3 text-xs tracking-widest font-semibold text-slate-500 hover:text-white transition-colors uppercase"
+                style={{ fontFamily: 'Inter, sans-serif' }}
+              >
+                Voltar
+              </button>
             </div>
           </motion.div>
         )}
@@ -923,6 +970,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             avatar={generatedAvatar}
             skillValues={skillValues}
             onFinish={finishOnboarding}
+            onBack={handleBack}
           />
         )}
       </AnimatePresence>
@@ -1143,9 +1191,10 @@ interface SummaryProps {
   avatar: string | null;
   skillValues: Record<string, number>;
   onFinish: () => void;
+  onBack?: () => void;
 }
 
-function SummaryScreen({ variants, name, chosenClass, avatar, skillValues, onFinish }: SummaryProps) {
+function SummaryScreen({ variants, name, chosenClass, avatar, skillValues, onFinish, onBack }: SummaryProps) {
   const className = chosenClass ? CLASS_LABELS[chosenClass] : '—';
   // Only consider the five skill keys chosen on step 5 (defensive against stray keys).
   const SKILL_KEYS = ['physical', 'mental', 'spiritual', 'professional', 'financial'] as const;
@@ -1166,7 +1215,7 @@ function SummaryScreen({ variants, name, chosenClass, avatar, skillValues, onFin
         aria-hidden
         className="pointer-events-none absolute top-16 right-0 w-[52%] max-w-[260px] aspect-[3/4] z-0"
         style={{
-          backgroundImage: `url(${hakimSummaryOwlAsset.url})`,
+          backgroundImage: `url(${hakim2})`,
           backgroundSize: 'contain',
           backgroundRepeat: 'no-repeat',
           backgroundPosition: 'left center',
@@ -1254,13 +1303,23 @@ function SummaryScreen({ variants, name, chosenClass, avatar, skillValues, onFin
           </div>
         </div>
 
-        <div className="mt-6 px-1 flex justify-center">
+        <div className="mt-6 px-1 flex flex-col items-center gap-2">
           <Button onClick={onFinish}
             className="w-full max-w-sm h-14 rounded-xl text-base tracking-[0.18em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.6)] border border-amber-300/60"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
             INICIAR MINHA JORNADA!
           </Button>
+          {onBack && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="mt-4 text-xs tracking-widest font-semibold text-slate-500 hover:text-white transition-colors uppercase"
+              style={{ fontFamily: 'Inter, sans-serif' }}
+            >
+              Voltar
+            </button>
+          )}
         </div>
       </div>
     </motion.div>

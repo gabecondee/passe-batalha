@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Dashboard from './Dashboard';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { supabase } from '@/integrations/supabase/client';
@@ -45,10 +45,10 @@ const Index = () => {
     checkOnboarding();
   }, [user, authLoading]);
 
-  const handleComplete = (data: { name: string; avatar: string | null }) => {
+  const handleComplete = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => {
     completeOnboarding(data);
     setHasCompletedOnboarding(true);
-  };
+  }, [completeOnboarding]);
 
   if (loading || authLoading) {
     return (
