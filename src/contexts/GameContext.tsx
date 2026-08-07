@@ -31,6 +31,7 @@ interface GameContextType {
   removeXpFromSkill: (skillId: string) => void;
   unlockSkill: (skillId: string) => void;
   addSkill: (skill: { name: string; description: string; icon: string; attribute: AttributeType }) => void;
+  deleteSkill: (skillId: string) => void;
   resetSkills: () => void;
   applyBossPenalty: (penaltyAreas: string[], penaltyPoints: number) => void;
   applyBossReward: (rewardAreas: string[], rewardXp: number) => void;
@@ -149,6 +150,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           createdAt: m.created_at
         }));
         setMissions(mappedMissions);
+      }
+
+      // 3. Fetch Skills (both default and user custom skills)
+      const { data: dbSkills, error: skillsError } = await supabase
+        .from('skills')
+        .select('*');
+
+      if (!skillsError && dbSkills && dbSkills.length > 0) {
+        const mappedSkills: Skill[] = dbSkills.map(s => ({
+          id: s.id,
+          name: s.name,
+          description: s.description || '',
+          icon: s.icon || '⭐',
+          attribute: s.attribute as AttributeType,
+          xp: 0,
+          level: 0,
+          maxLevel: 10,
+          unlocked: true,
+          isDefault: s.is_default ?? false,
+          userId: s.user_id,
+        }));
+        setSkills(mappedSkills);
+      } else {
+        // Fallback to local default skills marked as default
+        setSkills(initialSkills.map(s => ({ ...s, isDefault: true })));
       }
     };
     fetchData();
@@ -418,28 +444,71 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  const addSkill = useCallback((newSkill: {
+  const addSkill = useCallback(async (newSkill: {
     name: string;
     description: string;
     icon: string;
     attribute: AttributeType;
   }) => {
-    const id = `skill-${Date.now()}`;
-    const skill: Skill = {
-      id,
+    const tempId = `skill-${Date.now()}`;
+    const skillToSave: Skill = {
+      id: tempId,
       name: newSkill.name,
       attribute: newSkill.attribute,
       xp: 0,
       level: 0,
       maxLevel: 10,
-      unlocked: false,
+      unlocked: true,
       description: newSkill.description,
       icon: newSkill.icon,
+      isDefault: false,
+      userId: authUser?.id,
     };
 
-    setSkills(prevSkills => [...prevSkills, skill]);
+    if (authUser) {
+      const { data, error } = await supabase
+        .from('skills')
+        .insert({
+          user_id: authUser.id,
+          name: newSkill.name,
+          description: newSkill.description,
+          icon: newSkill.icon,
+          attribute: newSkill.attribute,
+          is_default: false
+        })
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao salvar skill no Supabase:', error);
+        toast.error('Erro ao salvar habilidade no banco de dados.');
+      } else if (data) {
+        skillToSave.id = data.id;
+      }
+    }
+
+    setSkills(prevSkills => [...prevSkills, skillToSave]);
     toast.success(`✨ ${newSkill.name} foi adicionada à árvore!`);
-  }, []);
+  }, [authUser]);
+
+  const deleteSkill = useCallback(async (skillId: string) => {
+    if (authUser) {
+      const { error } = await supabase
+        .from('skills')
+        .delete()
+        .eq('id', skillId)
+        .eq('user_id', authUser.id);
+
+      if (error) {
+        console.error('Erro ao excluir skill:', error);
+        toast.error('Erro ao excluir habilidade.');
+        return;
+      }
+    }
+
+    setSkills(prevSkills => prevSkills.filter(s => s.id !== skillId));
+    toast.success('Habilidade removida com sucesso!');
+  }, [authUser]);
 
   const resetSkills = useCallback(() => {
     setSkills(prevSkills =>
@@ -787,6 +856,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     removeXpFromSkill,
     unlockSkill,
     addSkill,
+    deleteSkill,
     resetSkills,
     applyBossPenalty,
     applyBossReward,

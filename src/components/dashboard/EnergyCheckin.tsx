@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, ChevronRight } from 'lucide-react';
+import { emit } from '@/lib/eventBus';
 import { cn } from '@/lib/utils';
 import { useGame } from '@/contexts/GameContext';
 import { useStreakReward, type StreakOutcome } from '@/hooks/useStreakReward';
@@ -91,6 +92,10 @@ export function EnergyCheckin() {
   const [streakOutcome, setStreakOutcome] = useState<StreakOutcome | null>(null);
   const { setEnergy } = useGame();
   const { state: streakState, checkIn, isLoading } = useStreakReward();
+
+  useEffect(() => {
+    emit({ type: 'ui:checkin-toggled', isOpen: open });
+  }, [open]);
 
   useEffect(() => {
     if (isLoading) return;

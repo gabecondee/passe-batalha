@@ -42,6 +42,8 @@ export interface Skill {
   description: string;
   icon: string;
   lastXpAdded?: string; // ISO date string of last XP addition
+  isDefault?: boolean;
+  userId?: string;
 }
 
 export type WeekDay = 'seg' | 'ter' | 'qua' | 'qui' | 'sex' | 'sab' | 'dom';

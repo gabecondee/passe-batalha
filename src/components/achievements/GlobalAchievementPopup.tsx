@@ -1,9 +1,11 @@
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Sparkles, Star } from 'lucide-react';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
 import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreakReward } from '@/hooks/useStreakReward';
+import { useBusEventType } from '@/lib/eventBus';
 import { supabase } from '@/integrations/supabase/client';
 import { RARITY_META } from '@/data/achievementsData';
 import { cn } from '@/lib/utils';
@@ -17,12 +19,15 @@ export function GlobalAchievementPopup() {
   const { hasCompletedOnboarding } = useGame();
   const { user } = useAuth();
   const { state: streakState, isLoading: isStreakLoading } = useStreakReward();
+  
+  const [isCheckinOpen, setIsCheckinOpen] = useState(false);
+  useBusEventType('ui:checkin-toggled', (e) => setIsCheckinOpen(e.isOpen));
 
   const today = new Date().toISOString().slice(0, 10);
   const hasCheckedIn = streakState.last_checkin_date === today;
 
-  // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet.
-  if (!hasCompletedOnboarding || isStreakLoading || !hasCheckedIn) return null;
+  // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet, or if it is currently open
+  if (!hasCompletedOnboarding || isStreakLoading || !hasCheckedIn || isCheckinOpen) return null;
 
   const handleDismiss = async () => {
     if (popup && user) {

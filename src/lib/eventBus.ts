@@ -17,7 +17,8 @@ export type BusEvent =
   | { type: 'finance:changed'; balance: number }
   | { type: 'agenda:event-completed'; eventId: string }
   | { type: 'fragments:changed'; balance: number; delta: number; reason: string }
-  | { type: 'achievement:unlocked'; achievementId: string };
+  | { type: 'achievement:unlocked'; achievementId: string }
+  | { type: 'ui:checkin-toggled'; isOpen: boolean };
 
 type Handler = (e: BusEvent) => void;
 

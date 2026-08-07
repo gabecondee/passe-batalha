@@ -10,6 +10,7 @@ import {
   Briefcase,
   DollarSign,
   Crosshair,
+  Trash2,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SkillsRadar } from '@/components/dashboard/SkillsRadar';
@@ -91,7 +92,7 @@ const AREAS: AreaMeta[] = [
 
 const XP_PER_LEVEL = 100;
 
-function ReadOnlySkillRow({ skill, color }: { skill: Skill; color: string }) {
+function ReadOnlySkillRow({ skill, color, onDelete }: { skill: Skill; color: string; onDelete?: (id: string) => void }) {
   return (
     <div
       className="flex items-center gap-3 p-3 rounded-xl border bg-card/40"
@@ -115,12 +116,22 @@ function ReadOnlySkillRow({ skill, color }: { skill: Skill; color: string }) {
           </p>
         )}
       </div>
+      {!skill.isDefault && onDelete && (
+        <button
+          type="button"
+          onClick={() => onDelete(skill.id)}
+          title="Excluir habilidade"
+          className="p-2 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0 cursor-pointer"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }
 
 export default function Skills() {
-  const { skills, attributes, addSkill } = useGame();
+  const { skills, attributes, addSkill, deleteSkill } = useGame();
   const [helpOpen, setHelpOpen] = useState(false);
   const [openArea, setOpenArea] = useState<AreaMeta | null>(null);
 
@@ -313,7 +324,7 @@ export default function Skills() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
                     >
-                      <ReadOnlySkillRow skill={s} color={openArea.color} />
+                      <ReadOnlySkillRow skill={s} color={openArea.color} onDelete={deleteSkill} />
                     </motion.div>
                   ))}
                 </AnimatePresence>
