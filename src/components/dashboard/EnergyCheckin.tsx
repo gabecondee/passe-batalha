@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, X, ChevronRight } from 'lucide-react';
 import { emit } from '@/lib/eventBus';
+import { toISODate } from '@/lib/missionRewards';
 import { cn } from '@/lib/utils';
 import { useGame } from '@/contexts/GameContext';
 import { useStreakReward, type StreakOutcome } from '@/hooks/useStreakReward';
@@ -82,7 +83,7 @@ function getEnergyColor(level: number): string {
 }
 
 function getTodayKey() {
-  return `energy-checkin-${new Date().toISOString().slice(0, 10)}`;
+  return `energy-checkin-${toISODate(new Date())}`;
 }
 
 export function EnergyCheckin() {
@@ -100,7 +101,7 @@ export function EnergyCheckin() {
   useEffect(() => {
     if (isLoading) return;
     
-    const today = new Date().toISOString().slice(0, 10);
+    const today = toISODate(new Date());
     if (streakState.last_checkin_date !== today) {
       const timer = setTimeout(() => setOpen(true), 50);
       return () => clearTimeout(timer);

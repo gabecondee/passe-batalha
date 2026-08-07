@@ -12,7 +12,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
 import { useAgenda } from '@/hooks/useAgenda';
 import { WeekDay } from '@/types/game';
-import { XP_PER_ACTION } from '@/lib/missionRewards';
+import { XP_PER_ACTION, toISODate } from '@/lib/missionRewards';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap, Flame, Star, Shield, Trophy, Swords, ChevronRight,
@@ -84,7 +84,7 @@ export default function Dashboard() {
     return map[new Date().getDay()];
   }, []);
 
-  const todayISO = new Date().toISOString().slice(0, 10);
+  const todayISO = toISODate(new Date());
   const now = new Date();
   const allDailyMissions = missions.filter((m) => {
     if (!m.dailyAction || !m.weekDays || m.weekDays.length === 0) return false;

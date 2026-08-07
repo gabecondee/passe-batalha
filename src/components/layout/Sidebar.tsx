@@ -16,13 +16,13 @@ import { isNavItemActive } from '@/lib/navModules';
 import logoSrc from '@/assets/logo.png';
 
 const navItems = [
-  { path: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/skills', label: 'Habilidades', icon: TreeDeciduous },
+  { path: '/', label: 'Home', icon: LayoutDashboard },
+  { path: '/skills', label: 'Skills', icon: TreeDeciduous },
   { path: '/missions', label: 'Missões', icon: Target },
-  { path: '/inventory', label: 'Inventário', icon: Backpack },
   { path: '/bosses', label: 'Chefões', icon: Skull },
+  { path: '/inventory', label: 'Inventário', icon: Backpack },
   { path: '/ranking', label: 'Ranking', icon: Trophy },
-  { path: '/settings', label: 'Config', icon: Settings },
+  { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
 export function Sidebar() {

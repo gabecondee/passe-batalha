@@ -14,6 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { AGENDA_CATEGORIES, AgendaCategory, AgendaEvent, AgendaRecurrence } from '@/types/agenda';
+import { useAgenda } from '@/hooks/useAgenda';
 
 export interface AgendaEventInput {
   name: string;
@@ -49,6 +50,7 @@ export function AddEventDialog({
   open: controlledOpen,
   onOpenChange,
 }: AddEventDialogProps) {
+  const { categoriesList } = useAgenda();
   const isControlled = controlledOpen !== undefined;
   const [internalOpen, setInternalOpen] = useState(false);
   const open = isControlled ? controlledOpen! : internalOpen;
@@ -75,7 +77,7 @@ export function AddEventDialog({
       setName(editing.name);
       setCategory(editing.category);
       setDate(editing.date);
-      setTime(editing.time ?? '');
+      setTime(editing.time ? editing.time.slice(0, 5) : '');
       setDescription(editing.description ?? '');
       setRecurrence(editing.recurrence);
       setSyncWithGoogle(Boolean(editing.googleCalendarId));
@@ -170,7 +172,7 @@ export function AddEventDialog({
             <Select value={category} onValueChange={(v) => setCategory(v as AgendaCategory)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {Object.values(AGENDA_CATEGORIES).map((c) => (
+                {categoriesList.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     <span className="mr-2">{c.icon}</span>{c.label}
                   </SelectItem>

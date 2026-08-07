@@ -19,7 +19,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useFinances } from '@/hooks/useFinances';
 import { useStreakReward } from '@/hooks/useStreakReward';
 import { cn, formatCompactNumber } from '@/lib/utils';
-import mochilaAsset from '@/assets/mochila.png.asset.json';
+import mochilaImg from '@/assets/mochila.png';
 
 interface ShortcutCard {
   id: string;
@@ -93,7 +93,7 @@ export default function Inventory() {
             className="flex justify-center my-6"
           >
             <motion.img
-              src={mochilaAsset.url}
+              src={mochilaImg}
               alt="Mochila do caçador"
               animate={{ y: [0, -6, 0] }}
               transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}

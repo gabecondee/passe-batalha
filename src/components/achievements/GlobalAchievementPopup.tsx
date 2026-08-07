@@ -6,6 +6,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreakReward } from '@/hooks/useStreakReward';
 import { useBusEventType } from '@/lib/eventBus';
+import { toISODate } from '@/lib/missionRewards';
 import { supabase } from '@/integrations/supabase/client';
 import { RARITY_META } from '@/data/achievementsData';
 import { cn } from '@/lib/utils';
@@ -23,7 +24,7 @@ export function GlobalAchievementPopup() {
   const [isCheckinOpen, setIsCheckinOpen] = useState(false);
   useBusEventType('ui:checkin-toggled', (e) => setIsCheckinOpen(e.isOpen));
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toISODate(new Date());
   const hasCheckedIn = streakState.last_checkin_date === today;
 
   // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet, or if it is currently open

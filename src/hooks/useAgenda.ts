@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { format, parseISO, isSameDay, addDays, differenceInCalendarDays } from 'date-fns';
-import { AgendaEvent, AgendaCategory, AgendaRecurrence, normalizeCategory } from '@/types/agenda';
+import { 
+  AGENDA_CATEGORIES, 
+  AgendaCategory, 
+  AgendaCategoryMeta, 
+  AgendaEvent, 
+  AgendaRecurrence, 
+  AgendaSource,
+  normalizeCategory 
+} from '@/types/agenda';
 import { useGame } from '@/contexts/GameContext';
 import { WeekDay } from '@/types/game';
 import {
@@ -68,6 +76,32 @@ export function useAgenda() {
   const [googleSyncing, setGoogleSyncing] = useState(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
 
+  const [categoriesMap, setCategoriesMap] = useState<Record<string, AgendaCategoryMeta>>(AGENDA_CATEGORIES);
+
+  const fetchCategories = useCallback(async () => {
+    const { data } = await supabase
+      .from('agenda_categories')
+      .select('*');
+
+    if (data && data.length > 0) {
+      const map: Record<string, AgendaCategoryMeta> = { ...AGENDA_CATEGORIES };
+      data.forEach(c => {
+        map[c.key] = {
+          id: c.key as any,
+          label: c.label,
+          icon: c.icon || '📄',
+          color: c.color || 'text-cyan-400 border-cyan-400/50',
+          bg: c.bg || 'bg-cyan-400/10'
+        };
+      });
+      setCategoriesMap(map);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCategories();
+  }, [fetchCategories]);
+
   const fetchManualEvents = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
@@ -81,7 +115,7 @@ export function useAgenda() {
         name: d.title,
         category: normalizeCategory(d.category || 'health'),
         date: d.event_date,
-        time: d.event_time || undefined,
+        time: d.event_time ? d.event_time.slice(0, 5) : undefined,
         description: d.description || undefined,
         recurrence: (d.recurrence || 'none') as AgendaRecurrence,
         source: (d.source || 'manual') as any,
@@ -369,6 +403,8 @@ export function useAgenda() {
     deleteEvent,
     eventsByDate,
     upcomingEvents,
+    categoriesMap,
+    categoriesList: Object.values(categoriesMap),
     // Google
     googleConnected: Boolean(googleSession),
     googleSyncing,

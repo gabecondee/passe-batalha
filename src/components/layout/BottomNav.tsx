@@ -19,7 +19,7 @@ const navItems = [
   { path: '/bosses', label: 'Chefões', icon: Skull },
   { path: '/inventory', label: 'Inventário', icon: Backpack },
   { path: '/ranking', label: 'Ranking', icon: BarChart3 },
-  { path: '/settings', label: 'Config', icon: Settings },
+  { path: '/settings', label: 'Configurações', icon: Settings },
 ];
 
 export function BottomNav() {

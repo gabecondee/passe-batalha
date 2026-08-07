@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { emit } from '@/lib/eventBus';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { toISODate } from '@/lib/missionRewards';
 
 const SYNC_EVENT = 'streak-reward:sync';
 
@@ -77,7 +78,7 @@ export function addFragments(amount: number, reason: string): number {
 }
 
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toISODate(new Date());
 }
 
 function daysBetween(a: string, b: string): number {

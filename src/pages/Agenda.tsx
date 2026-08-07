@@ -82,9 +82,12 @@ export default function Agenda() {
     toggleComplete,
     deleteEvent,
     eventsByDate,
+    categoriesMap,
     googleConnected,
     googleSyncing,
+    googleError,
     connectGoogleCalendar,
+    disconnectGoogleCalendar,
   } = useAgenda();
 
   const [monthCursor, setMonthCursor] = useState(() => new Date());
@@ -260,6 +263,7 @@ export default function Agenda() {
                           status={statusOf(e, now)}
                           onToggle={() => toggleComplete(e.id)}
                           onEdit={e.source === 'manual' ? () => openEdit(e) : undefined}
+                          categoriesMap={categoriesMap}
                         />
                       ))
                     )}
@@ -419,13 +423,15 @@ function TodayRow({
   status,
   onToggle,
   onEdit,
+  categoriesMap,
 }: {
   event: AgendaEvent;
   status: EventStatus;
   onToggle: () => void;
   onEdit?: () => void;
+  categoriesMap?: Record<string, any>;
 }) {
-  const meta = AGENDA_CATEGORIES[event.category];
+  const meta = (categoriesMap && categoriesMap[event.category]) || AGENDA_CATEGORIES[event.category] || AGENDA_CATEGORIES.other;
   const s = STATUS_META[status];
   const StatusIcon = s.Icon;
   return (
@@ -441,7 +447,7 @@ function TodayRow({
         <StatusIcon className={cn('w-5 h-5', s.color)} />
       </button>
       <div className={cn('font-display text-sm shrink-0 w-14', s.color)}>
-        {event.time || '--:--'}
+        {event.time ? event.time.slice(0, 5) : '--:--'}
       </div>
       <div className="min-w-0 flex-1">
         <div
