@@ -57,11 +57,11 @@ export function useMeals() {
           foods: (d.foods || []).map((f: any) => ({
             id: f.id,
             name: f.name,
-            quantity: Number(f.quantity),
-            kcal: f.kcal,
-            carbs: Number(f.carbs),
-            protein: Number(f.protein),
-            fat: Number(f.fat)
+            quantity: String(f.quantity || ''),
+            kcal: Number(f.kcal) || 0,
+            carbs: Number(f.carbs) || 0,
+            protein: Number(f.protein) || 0,
+            fat: Number(f.fat) || 0
           }))
         }));
         setMealsState(mapped);

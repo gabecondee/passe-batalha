@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { User, Plus, Dumbbell, ChevronRight, ArrowLeft, Calendar, Ruler, Weight, Trash2 } from 'lucide-react';
@@ -35,8 +35,20 @@ export default function Training() {
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const { user } = useGame();
   const navigate = useNavigate();
+
+  const userAge = useMemo(() => {
+    if (!user.birthDate) return null;
+    const cleanDate = user.birthDate.slice(0, 10);
+    const today = new Date();
+    const birth = new Date(cleanDate + 'T00:00:00');
+    if (isNaN(birth.getTime())) return null;
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? age : null;
+  }, [user.birthDate]);
   
-  const { plan, exercises, isLoading, savePlan, deletePlan } = useTraining();
+  const { plan, exercises, dayMuscles, isLoading, savePlan, deletePlan } = useTraining();
 
   const handleSave = async (p: TrainingPlan) => {
     await savePlan(p);
@@ -55,8 +67,13 @@ export default function Training() {
   const sortedDays = plan?.days.slice().sort((a, b) => DAY_ORDER.indexOf(a) - DAY_ORDER.indexOf(b)) ?? [];
 
   const musclesForDay = (d: WeekDayKey): string => {
-    // In new version we don't save muscle ids explicitly, just exercises.
-    // If we wanted to, we could map them. For now we just say "Ativo" if there are exercises, or Empty.
+    const selected = dayMuscles[d];
+    if (selected && selected.length > 0) {
+      const names = selected
+        .map(id => MUSCLES.find(m => m.id === id)?.name)
+        .filter(Boolean);
+      return names.join(', ');
+    }
     const dayEx = exercises.filter(e => e.day_of_week === d);
     if (dayEx.length === 0) return 'Vazio';
     return `${dayEx.length} exercícios`;
@@ -78,7 +95,7 @@ export default function Training() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate(-1)}
+            onClick={() => navigate('/inventory')}
             className="w-11 h-11 shrink-0 rounded-xl border-border/60 bg-card/60"
             aria-label="Voltar"
           >
@@ -132,9 +149,21 @@ export default function Training() {
               {toTitleCase(user.name || 'Não informado')}
             </h2>
             <div className="space-y-1.5">
-              <ProfileRow icon={<Calendar className="h-4 w-4" />} label="Idade" value={plan?.age ? `${plan.age} anos` : 'Não informado'} />
-              <ProfileRow icon={<Ruler className="h-4 w-4" />} label="Altura" value={plan?.height ? `${(plan.height / 100).toFixed(2).replace('.', ',')} m` : 'Não informado'} />
-              <ProfileRow icon={<Weight className="h-4 w-4" />} label="Peso" value={plan?.weight ? `${plan.weight} kg` : 'Não informado'} />
+              <ProfileRow
+                icon={<Calendar className="h-4 w-4" />}
+                label="Idade"
+                value={userAge !== null ? `${userAge} anos` : (plan?.age ? `${plan.age} anos` : 'Não informado')}
+              />
+              <ProfileRow
+                icon={<Ruler className="h-4 w-4" />}
+                label="Altura"
+                value={user.height ? `${(user.height / 100).toFixed(2).replace('.', ',')} m` : (plan?.height ? `${(plan.height / 100).toFixed(2).replace('.', ',')} m` : 'Não informado')}
+              />
+              <ProfileRow
+                icon={<Weight className="h-4 w-4" />}
+                label="Peso"
+                value={user.weight ? `${user.weight} kg` : (plan?.weight ? `${plan.weight} kg` : 'Não informado')}
+              />
             </div>
           </div>
         </motion.div>

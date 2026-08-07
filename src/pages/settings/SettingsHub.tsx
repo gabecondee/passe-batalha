@@ -1,4 +1,4 @@
-import { Palette, Link2, Database, HelpCircle, Users, ScrollText, DoorOpen, Star, Pencil, Settings } from 'lucide-react';
+import { Palette, Link2, HelpCircle, Users, ScrollText, DoorOpen, Star, Pencil, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SettingsCard } from '@/components/settings/SettingsCard';
@@ -90,7 +90,6 @@ export default function SettingsHub() {
         <div className="space-y-3">
           <SettingsCard icon={Palette} title="Aparência" description="Escolha o tema que mais combina com a sua jornada." to="/settings/appearance" />
           <SettingsCard icon={Link2} title="Integrações" description="Conecte suas ferramentas favoritas ao Passe de Batalha." to="/settings/integrations" />
-          <SettingsCard icon={Database} title="Dados" description="Exportar dados, backup e sincronização" to="/settings/data" />
           <SettingsCard icon={HelpCircle} title="Suporte" description="Reportar bugs, sugestões e dúvidas." onClick={() => window.open('https://wa.me/43999817625', '_blank')} />
           <SettingsCard icon={Users} title="Comunidade" description="Interaja com os outros membros da guilda." onClick={() => window.open('https://passedebatalha.circle.so/feed', '_blank')} />
           <SettingsCard icon={ScrollText} title="Documentos Legais" description="Termos de uso e política de privacidade da plataforma." to="/settings/legal" />

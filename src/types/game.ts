@@ -19,6 +19,10 @@ export interface User {
   rank: number;
   title: string;
   userClass?: string;
+  birthDate?: string;
+  weight?: number;
+  height?: number;
+  gender?: string;
 }
 
 export interface Attribute {

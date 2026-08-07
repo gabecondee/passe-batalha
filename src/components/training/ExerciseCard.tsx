@@ -44,7 +44,6 @@ export function ExerciseCard({ exercise, onChange, onDelete, locked = false }: E
 
   return (
     <motion.div
-      layout
       className={cn(
         'overflow-hidden rounded-2xl border bg-gradient-to-br from-card to-secondary/30 transition-all',
         allDone

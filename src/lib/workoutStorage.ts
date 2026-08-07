@@ -36,6 +36,7 @@ export function useTraining() {
   const { user } = useAuth();
   const [plan, setPlan] = useState<any | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [dayMuscles, setDayMuscles] = useState<Record<string, MuscleId[]>>({});
   const [isLoading, setIsLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
@@ -67,7 +68,8 @@ export function useTraining() {
     const { data: eData } = await supabase
       .from('exercises')
       .select('*')
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true });
       
     if (eData) {
       setExercises(eData.map(e => ({
@@ -77,6 +79,21 @@ export function useTraining() {
         day_of_week: e.day_of_week
       })));
     }
+
+    // Fetch Day Muscles
+    const { data: mData } = await supabase
+      .from('user_day_muscles')
+      .select('*')
+      .eq('user_id', user.id);
+
+    if (mData) {
+      const map: Record<string, MuscleId[]> = {};
+      mData.forEach(m => {
+        map[m.day_of_week] = (m.muscles as MuscleId[]) || [];
+      });
+      setDayMuscles(map);
+    }
+
     setIsLoading(false);
   }, [user]);
 
@@ -109,7 +126,16 @@ export function useTraining() {
 
   const deletePlan = async () => {
     if (!user) return;
+    // 1. Deletar plano de treino
     await supabase.from('training_plans').delete().eq('user_id', user.id);
+    // 2. Deletar todos os exercícios cadastrados
+    await supabase.from('exercises').delete().eq('user_id', user.id);
+    // 3. Deletar todas as configurações de músculos por dia
+    await supabase.from('user_day_muscles').delete().eq('user_id', user.id);
+
+    setPlan(null);
+    setExercises([]);
+    setDayMuscles({});
     await fetchAll();
   };
 
@@ -162,15 +188,30 @@ export function useTraining() {
     window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', day } }));
   };
 
+  const saveDayMuscles = async (day: string, muscles: MuscleId[]) => {
+    if (!user) return;
+    setDayMuscles(prev => ({ ...prev, [day]: muscles }));
+    const { error } = await supabase.from('user_day_muscles').upsert({
+      user_id: user.id,
+      day_of_week: day,
+      muscles: muscles
+    }, { onConflict: 'user_id,day_of_week' });
+    if (error) {
+      console.error('Erro ao salvar músculos do dia:', error);
+    }
+  };
+
   return {
     plan,
     exercises,
+    dayMuscles,
     isLoading,
     savePlan,
     deletePlan,
     addExercise,
     updateExercise,
     deleteExercise,
-    logWorkout
+    logWorkout,
+    saveDayMuscles
   };
 }

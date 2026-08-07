@@ -33,6 +33,7 @@ interface GameContextType {
   addSkill: (skill: { name: string; description: string; icon: string; attribute: AttributeType }) => void;
   deleteSkill: (skillId: string) => void;
   resetSkills: () => void;
+  refreshProfile: () => Promise<void>;
   applyBossPenalty: (penaltyAreas: string[], penaltyPoints: number) => void;
   applyBossReward: (rewardAreas: string[], rewardXp: number) => void;
   addAttributeXp: (attribute: AttributeType, xp: number) => void;
@@ -90,7 +91,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch Profile Progression
       const { data: profile } = await supabase
         .from('profiles')
-        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial, onboarding_completed, name, last_seen_level, class')
+        .select('energy, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial, onboarding_completed, name, last_seen_level, class, birth_date, weight, height, gender')
         .eq('id', authUser.id)
         .single();
         
@@ -99,6 +100,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setHasCompletedOnboarding(!!profile.onboarding_completed);
         if (profile.name) setCustomName(profile.name);
         if (profile.class) setUserClass(profile.class);
+        if (profile.birth_date) setUserBirthDate(profile.birth_date.slice(0, 10));
+        if (profile.weight !== null && profile.weight !== undefined) setUserWeight(Number(profile.weight));
+        if (profile.height !== null && profile.height !== undefined) setUserHeight(Number(profile.height));
+        if (profile.gender) setUserGender(profile.gender);
         setLastKnownLevel(profile.last_seen_level ?? 1);
         setAttributeXpBonus({
           physical: profile.xp_physical ?? 0,
@@ -180,6 +185,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     fetchData();
   }, [authUser]);
   const [userClass, setUserClass] = useState<string | undefined>(undefined);
+  const [userBirthDate, setUserBirthDate] = useState<string | undefined>(undefined);
+  const [userWeight, setUserWeight] = useState<number | undefined>(undefined);
+  const [userHeight, setUserHeight] = useState<number | undefined>(undefined);
+  const [userGender, setUserGender] = useState<string | undefined>(undefined);
   const [attributeXpBonus, setAttributeXpBonus] = useState<Record<AttributeType, number>>(() => {
     // Level always starts at 1 after the first login; XP is earned only from actions.
     return { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
@@ -331,6 +340,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const userName = customName || initialUser.name;
     return {
       ...initialUser,
+      id: authUser?.id || initialUser.id,
       name: userName,
       level,
       totalXP: displayedTotalXP,
@@ -338,9 +348,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       xpToNextLevel: info.xpToNextLevel,
       title,
       userClass,
+      birthDate: userBirthDate,
+      weight: userWeight,
+      height: userHeight,
+      gender: userGender,
       ...(energyOverride !== null ? { energy: energyOverride } : {}),
     };
-  }, [attributes, attributeInitialXp, customName, energyOverride, userClass]);
+  }, [attributes, attributeInitialXp, customName, energyOverride, userClass, userBirthDate, userWeight, userHeight, userGender, authUser?.id]);
 
 
   // Detect level-up by comparing to last known level
@@ -843,6 +857,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toast.success(`🏆 Recompensa aplicada: +${rewardXp} XP nas áreas: ${rewardAreas.join(', ')}`);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    if (!authUser) return;
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('name, class, birth_date, weight, height, gender')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profile) {
+      if (profile.name) setCustomName(profile.name);
+      if (profile.class) setUserClass(profile.class);
+      setUserBirthDate(profile.birth_date ? profile.birth_date.slice(0, 10) : undefined);
+      setUserWeight(profile.weight !== null && profile.weight !== undefined ? Number(profile.weight) : undefined);
+      setUserHeight(profile.height !== null && profile.height !== undefined ? Number(profile.height) : undefined);
+      setUserGender(profile.gender || undefined);
+    }
+  }, [authUser]);
+
   const value: GameContextType = {
     user: customAvatar ? { ...user, avatar: customAvatar } : user,
     updateAvatar,
@@ -858,6 +890,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     addSkill,
     deleteSkill,
     resetSkills,
+    refreshProfile,
     applyBossPenalty,
     applyBossReward,
     addAttributeXp,

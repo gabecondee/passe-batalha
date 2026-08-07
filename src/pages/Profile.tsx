@@ -3,7 +3,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCard } from '@/components/dashboard/CharacterCard';
 import { AttributeRadar } from '@/components/dashboard/AttributeRadar';
 import { useGame } from '@/contexts/GameContext';
-import { Calendar, Target, Star, Camera } from 'lucide-react';
+import { Calendar, Target, Star, Camera, Cake, Scale, Ruler, User as UserIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Profile() {
@@ -24,10 +24,33 @@ export default function Profile() {
     updateAvatar(url);
   };
 
+  function calculateAge(birthDateStr?: string) {
+    if (!birthDateStr) return null;
+    const cleanDate = birthDateStr.slice(0, 10);
+    const today = new Date();
+    const birth = new Date(cleanDate + 'T00:00:00');
+    if (isNaN(birth.getTime())) return null;
+    let age = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
+    return age >= 0 ? age : null;
+  }
+
+  const age = calculateAge(user.birthDate);
+
   const stats = [
     { icon: Target, label: 'Missões Concluídas', value: completedMissions },
     { icon: Star, label: 'Habilidades Desbloqueadas', value: unlockedSkills },
     { icon: Calendar, label: 'Dias de Streak', value: 0 },
+  ];
+
+  const genderLabel = user.gender === 'male' ? 'Masculino' : user.gender === 'female' ? 'Feminino' : user.gender === 'other' ? 'Outro' : '-';
+
+  const bioStats = [
+    { icon: UserIcon, label: 'Sexo', value: genderLabel },
+    { icon: Cake, label: 'Idade', value: age !== null ? `${age} anos` : '-' },
+    { icon: Scale, label: 'Peso', value: user.weight ? `${user.weight} kg` : '-' },
+    { icon: Ruler, label: 'Altura', value: user.height ? `${user.height} cm` : '-' },
   ];
 
   return (
@@ -69,6 +92,17 @@ export default function Profile() {
               <stat.icon className="w-6 h-6 mx-auto mb-2 text-primary" />
               <p className="text-2xl font-display">{stat.value}</p>
               <p className="text-xs text-muted-foreground">{stat.label}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* Physical Bio Grid: Sexo, Idade, Peso, Altura */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {bioStats.map((stat, index) => (
+            <div key={index} className="fantasy-card p-4 text-center">
+              <stat.icon className="w-5 h-5 mx-auto mb-1.5 text-amber-400" />
+              <p className="text-base md:text-lg font-display text-primary">{stat.value}</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wider">{stat.label}</p>
             </div>
           ))}
         </div>

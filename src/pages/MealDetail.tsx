@@ -125,16 +125,16 @@ export default function MealDetail() {
               {meal.foods
                 .slice()
                 .map((f) => (
-                  <li key={f.id} className="group">
-                    <button
+                  <li key={f.id} className="group flex items-center justify-between p-4 transition hover:bg-primary/5">
+                    <div
                       onClick={() => {
                         setEditingFood(f);
                         setFoodOpen(true);
                       }}
-                      className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-primary/5"
+                      className="flex flex-1 items-center gap-3 min-w-0 cursor-pointer"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-display text-base text-foreground">{f.name}</p>
+                        <p className="truncate font-display text-base text-foreground font-semibold">{f.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
                           {f.quantity || '—'}
                         </p>
@@ -143,6 +143,17 @@ export default function MealDetail() {
                         {Math.round(f.kcal)} kcal
                       </span>
                       <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteFood(meal.id, f.id);
+                      }}
+                      aria-label={`Excluir ${f.name}`}
+                      className="ml-2 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground/60 transition hover:bg-destructive/10 hover:text-destructive shrink-0"
+                    >
+                      <Trash2 className="h-4 w-4" />
                     </button>
                   </li>
                 ))}

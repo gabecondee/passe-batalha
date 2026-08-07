@@ -16,7 +16,7 @@ import { XP_PER_ACTION, toISODate } from '@/lib/missionRewards';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap, Flame, Star, Shield, Trophy, Swords, ChevronRight,
-  Target, Calendar as CalendarIcon, Skull, Check, ShoppingCart, Gem, X, User
+  Target, Calendar as CalendarIcon, Skull, Check, ShoppingCart, Gem, X, User, Dumbbell
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useStreakReward, addFragments } from '@/hooks/useStreakReward';
@@ -303,20 +303,51 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-2">
               {pendingTodayEvents.map((evt) => (
-                <button
+                <div
                   key={evt.id}
-                  onClick={() => {
-                    if (evt.source === 'mission' && evt.sourceId) completeMission(evt.sourceId);
-                    else toggleComplete(evt.id);
-                  }}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-amber-400/40 transition text-left"
+                  className="w-full flex items-center justify-between gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-amber-400/40 transition text-left"
                 >
-                  <div className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 border-amber-400/40" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm truncate">{evt.name}</p>
-                    {evt.time && <p className="text-[10px] text-muted-foreground">{evt.time}</p>}
+                  <div
+                    className="flex items-center gap-3 flex-1 min-w-0 cursor-pointer"
+                    onClick={() => {
+                      if (evt.source === 'training' && evt.sourceId) {
+                        navigate(`/training/${evt.sourceId}`);
+                      } else if (evt.source === 'mission' && evt.sourceId) {
+                        completeMission(evt.sourceId);
+                      } else {
+                        toggleComplete(evt.id);
+                      }
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleComplete(evt.id);
+                      }}
+                      className="w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 border-amber-400/40 hover:bg-amber-400/20"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        {evt.source === 'training' && (
+                          <Dumbbell className="w-3.5 h-3.5 text-primary shrink-0" />
+                        )}
+                        <p className="text-sm truncate font-medium">{evt.name}</p>
+                      </div>
+                      {evt.time && <p className="text-[10px] text-muted-foreground">{evt.time}</p>}
+                    </div>
                   </div>
-                </button>
+
+                  {evt.source === 'training' && evt.sourceId && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/training/${evt.sourceId}`)}
+                      className="px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary font-display text-xs uppercase tracking-wider shrink-0 transition"
+                    >
+                      Iniciar
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}

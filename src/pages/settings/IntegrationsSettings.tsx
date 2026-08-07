@@ -79,7 +79,7 @@ export default function IntegrationsSettings() {
             )}
           </div>
 
-          {/* Open Finance - Temporariamente desabilitado */}
+          {/* Temporariamente comentados:
           <div className="fantasy-card p-4 md:p-5 flex items-center gap-4 opacity-50">
             <div className="w-12 h-12 rounded-lg bg-muted border border-border/40 flex items-center justify-center shrink-0">
               <Wallet className="w-5 h-5 text-muted-foreground" />
@@ -97,7 +97,6 @@ export default function IntegrationsSettings() {
             </span>
           </div>
 
-          {/* WhatsApp - Temporariamente desabilitado */}
           <div className="fantasy-card p-4 md:p-5 flex items-center gap-4 opacity-50">
             <div className="w-12 h-12 rounded-lg bg-muted border border-border/40 flex items-center justify-center shrink-0">
               <Phone className="w-5 h-5 text-muted-foreground" />
@@ -114,6 +113,7 @@ export default function IntegrationsSettings() {
               Em Breve
             </span>
           </div>
+          */}
         </div>
       </div>
     </MainLayout>

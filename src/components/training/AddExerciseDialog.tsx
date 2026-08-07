@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { ChevronDown, ChevronUp, Dumbbell } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,67 @@ interface AddExerciseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (draft: ExerciseDraft) => void;
+}
+
+function NumberStepper({
+  label,
+  value,
+  min,
+  max,
+  step = 1,
+  unit,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  unit?: string;
+  onChange: (v: number) => void;
+}) {
+  const inc = () => onChange(Math.min(max, parseFloat((value + step).toFixed(1))));
+  const dec = () => onChange(Math.max(min, parseFloat((value - step).toFixed(1))));
+
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-border/40 bg-secondary/40 p-3 backdrop-blur-sm">
+      <span className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        {label}
+      </span>
+      <div className="flex items-center gap-2 sm:gap-3">
+        <button
+          type="button"
+          onClick={dec}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-background/60 text-primary transition-all hover:bg-primary/20 hover:shadow-[0_0_12px_hsl(var(--primary)/0.5)] active:scale-95 shrink-0"
+          aria-label={`Diminuir ${label}`}
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+        <div className="flex items-center justify-center">
+          <input
+            type="number"
+            value={value}
+            min={min}
+            max={max}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
+            }}
+            className="w-14 bg-transparent text-center font-display text-lg font-semibold tabular-nums text-gradient-cyan outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          {unit && <span className="text-xs text-muted-foreground ml-0.5">{unit}</span>}
+        </div>
+        <button
+          type="button"
+          onClick={inc}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-background/60 text-primary transition-all hover:bg-primary/20 hover:shadow-[0_0_12px_hsl(var(--primary)/0.5)] active:scale-95 shrink-0"
+          aria-label={`Aumentar ${label}`}
+        >
+          <ChevronUp className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function AddExerciseDialog({ open, onOpenChange, onSave }: AddExerciseDialogProps) {
@@ -40,15 +102,16 @@ export function AddExerciseDialog({ open, onOpenChange, onSave }: AddExerciseDia
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md overflow-hidden border-primary/30 bg-card/80 backdrop-blur-xl">
+      <DialogContent className="max-w-md overflow-hidden border-primary/30 bg-card/90 backdrop-blur-xl">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-primary/10 via-transparent to-accent/10" />
         <DialogHeader>
-          <DialogTitle className="font-display text-lg uppercase tracking-widest text-gradient-cyan">
-            Novo Exercício
+          <DialogTitle className="flex items-center gap-2 font-display text-lg uppercase tracking-widest text-gradient-cyan">
+            <Dumbbell className="h-5 w-5 text-primary" />
+            <span>Novo Exercício</span>
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-4 py-2">
           <div className="space-y-1.5">
             <Label className="font-display text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
               Nome do exercício
@@ -57,15 +120,15 @@ export function AddExerciseDialog({ open, onOpenChange, onSave }: AddExerciseDia
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder="Ex: Remada Pronada"
-              className="h-11 bg-secondary/40"
+              className="h-11 bg-secondary/40 font-medium"
               autoFocus
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            <NumberField label="Séries" value={sets} onChange={setSets} min={1} max={20} />
-            <NumberField label="Reps" value={reps} onChange={setReps} min={1} max={100} />
-            <NumberField label="Peso (kg)" value={weight} onChange={setWeight} min={0} max={500} />
+          <div className="space-y-3">
+            <NumberStepper label="Peso Inicial KG" value={weight} min={0} max={500} step={2.5} onChange={setWeight} />
+            <NumberStepper label="Repetições" value={reps} min={1} max={100} step={1} onChange={setReps} />
+            <NumberStepper label="Séries" value={sets} min={1} max={20} step={1} onChange={setSets} />
           </div>
         </div>
 
@@ -78,38 +141,5 @@ export function AddExerciseDialog({ open, onOpenChange, onSave }: AddExerciseDia
         </Button>
       </DialogContent>
     </Dialog>
-  );
-}
-
-function NumberField({
-  label,
-  value,
-  onChange,
-  min,
-  max,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-  min: number;
-  max: number;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <Label className="font-display text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-        {label}
-      </Label>
-      <Input
-        type="number"
-        value={value}
-        min={min}
-        max={max}
-        onChange={(e) => {
-          const n = Number(e.target.value);
-          if (Number.isFinite(n)) onChange(Math.min(max, Math.max(min, n)));
-        }}
-        className="h-11 bg-secondary/40 text-center font-display text-base font-semibold"
-      />
-    </div>
   );
 }

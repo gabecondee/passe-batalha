@@ -10,6 +10,7 @@ import { ExerciseCard } from '@/components/training/ExerciseCard';
 import { MuscleIcon } from '@/components/training/MuscleIcon';
 import { WorkoutResultDialog } from '@/components/training/WorkoutResultDialog';
 import { useGame } from '@/contexts/GameContext';
+import { cn } from '@/lib/utils';
 import {
   useTraining,
   DayWorkout,
@@ -33,7 +34,7 @@ export default function TrainingDay() {
   const navigate = useNavigate();
   const { applyBossReward } = useGame();
 
-  const { exercises: allExercises, addExercise, updateExercise, deleteExercise, logWorkout } = useTraining();
+  const { exercises: allExercises, dayMuscles, saveDayMuscles, addExercise, updateExercise, deleteExercise, logWorkout } = useTraining();
   
   const [workout, setWorkout] = useState<DayWorkout>({ muscles: [], exercises: [] });
   const [muscleOpen, setMuscleOpen] = useState(false);
@@ -47,9 +48,10 @@ export default function TrainingDay() {
 
   useEffect(() => {
     const dayEx = allExercises.filter(e => e.day_of_week === day);
+    const currentMuscles = dayMuscles[day] || [];
     setWorkout(prev => {
       return {
-        muscles: [],
+        muscles: currentMuscles,
         exercises: dayEx.map(e => {
           const prevEx = prev.exercises.find(p => p.id === e.id);
           return {
@@ -62,7 +64,7 @@ export default function TrainingDay() {
         })
       };
     });
-  }, [allExercises, day]);
+  }, [allExercises, dayMuscles, day]);
 
   useEffect(() => {
     setStarted(false);
@@ -116,8 +118,9 @@ export default function TrainingDay() {
     }
   };
 
-  const handleSaveMuscles = (ids: MuscleId[]) => {
+  const handleSaveMuscles = async (ids: MuscleId[]) => {
     persist({ ...workout, muscles: ids });
+    await saveDayMuscles(day, ids);
   };
 
   const handleAddExercise = async (draft: ExerciseDraft) => {
@@ -251,12 +254,13 @@ export default function TrainingDay() {
         {/* Iniciar / Encerrar Treino */}
         <Button
           onClick={handleStartToggle}
+          disabled={!started && workout.exercises.length === 0}
           variant="outline"
-          className={
+          className={cn(
             started
               ? 'h-14 w-full rounded-2xl border-red-500/70 bg-transparent font-display uppercase tracking-[0.25em] text-red-500 hover:bg-red-500/10 hover:text-red-400'
-              : 'h-14 w-full rounded-2xl border-primary/60 bg-transparent font-display uppercase tracking-[0.25em] text-primary hover:bg-primary/10 hover:text-primary'
-          }
+              : 'h-14 w-full rounded-2xl border-primary/60 bg-transparent font-display uppercase tracking-[0.25em] text-primary hover:bg-primary/10 hover:text-primary disabled:opacity-50 disabled:cursor-not-allowed'
+          )}
         >
           {started ? (
             <>
@@ -295,14 +299,27 @@ export default function TrainingDay() {
           </Button>
 
           {workout.exercises.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-secondary/20 py-10 text-center">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-secondary/20 py-10 px-4 text-center">
               <Dumbbell className="mb-3 h-10 w-10 text-muted-foreground/60" />
-              <p className="font-display text-sm uppercase tracking-wider text-muted-foreground">
-                Nenhum exercício
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground/80">
-                Adicione seu primeiro exercício acima
-              </p>
+              {selectedMuscles.length > 0 ? (
+                <>
+                  <p className="font-display text-sm uppercase tracking-wider text-primary font-semibold">
+                    Treino de {selectedMuscles.map(m => m.name).join(', ')}
+                  </p>
+                  <p className="mt-1.5 text-xs text-muted-foreground/80 max-w-sm">
+                    Foco do dia: <span className="text-foreground font-medium">{selectedMuscles.map(m => m.name).join(' • ')}</span>. Adicione seu primeiro exercício acima!
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-display text-sm uppercase tracking-wider text-muted-foreground">
+                    Nenhum exercício
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground/80">
+                    Adicione seu primeiro exercício acima
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-2.5">

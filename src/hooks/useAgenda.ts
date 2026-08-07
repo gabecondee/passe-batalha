@@ -333,17 +333,22 @@ export function useAgenda() {
       .map((k: string) => TRAINING_KEY_TO_INDEX[k])
       .filter((i: number | undefined) => i !== undefined);
     const dayLabelByIdx: Record<number, string> = {};
+    const dayKeyByIdx: Record<number, string> = {};
     trainingPlan.days.forEach((k: string) => {
       const idx = TRAINING_KEY_TO_INDEX[k];
-      if (idx !== undefined) dayLabelByIdx[idx] = TRAINING_DAY_LABEL[k] || k;
+      if (idx !== undefined) {
+        dayLabelByIdx[idx] = TRAINING_DAY_LABEL[k] || k;
+        dayKeyByIdx[idx] = k;
+      }
     });
 
     const events: AgendaEvent[] = [];
     for (let i = 0; i < 60; i++) {
       const d = addDays(today, i);
       if (!targetDays.includes(d.getDay())) continue;
+      const dayKey = dayKeyByIdx[d.getDay()];
       events.push({
-        id: `training-${format(d, 'yyyy-MM-dd')}`,
+        id: `training-${dayKey}-${format(d, 'yyyy-MM-dd')}`,
         name: `Treino — ${dayLabelByIdx[d.getDay()] ?? ''}`.trim(),
         category: 'health',
         date: format(d, 'yyyy-MM-dd'),
@@ -351,13 +356,14 @@ export function useAgenda() {
         description: 'Sessão de treino programada',
         recurrence: 'weekly',
         source: 'training',
+        sourceId: dayKey,
         googleCalendarId: null,
         completed: false,
         createdAt: new Date().toISOString(),
       });
     }
     return events;
-  }, []);
+  }, [trainingPlan]);
 
   const allEvents = useMemo<AgendaEvent[]>(() => {
     const syncedIds = new Set(
@@ -374,10 +380,20 @@ export function useAgenda() {
     return [...manualEvents, ...uniqueGoogle, ...derivedMissionEvents, ...trainings];
   }, [manualEvents, googleEvents, derivedMissionEvents, derivedTrainingEvents, trainingDone]);
 
+  const parseLocalDate = (dateStr: string): Date => {
+    if (!dateStr) return new Date();
+    const clean = dateStr.slice(0, 10);
+    const parts = clean.split('-').map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+    return parseISO(dateStr);
+  };
+
   const eventsByDate = useCallback(
     (date: Date) =>
       allEvents
-        .filter((e) => isSameDay(parseISO(e.date), date))
+        .filter((e) => isSameDay(parseLocalDate(e.date), date))
         .sort((a, b) => (a.time || '').localeCompare(b.time || '')),
     [allEvents]
   );
@@ -386,7 +402,7 @@ export function useAgenda() {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     return allEvents
-      .filter((e) => differenceInCalendarDays(parseISO(e.date), today) >= 0)
+      .filter((e) => differenceInCalendarDays(parseLocalDate(e.date), today) >= 0)
       .sort((a, b) => {
         const da = a.date.localeCompare(b.date);
         if (da !== 0) return da;

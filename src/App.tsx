@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { GameProvider } from "@/contexts/GameContext";
 import { BossProvider } from "@/contexts/BossContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -77,7 +77,7 @@ const App = () => (
               <Route path="/settings/gameplay" element={<ProtectedRoute><GameplaySettings /></ProtectedRoute>} />
               <Route path="/settings/appearance" element={<ProtectedRoute><AppearanceSettings /></ProtectedRoute>} />
               <Route path="/settings/integrations" element={<ProtectedRoute><IntegrationsSettings /></ProtectedRoute>} />
-              <Route path="/settings/data" element={<ProtectedRoute><DataSettings /></ProtectedRoute>} />
+              <Route path="/settings/data" element={<Navigate to="/settings/account" replace />} />
               <Route path="/settings/statistics" element={<ProtectedRoute><StatisticsSettings /></ProtectedRoute>} />
               <Route path="/settings/fragments" element={<ProtectedRoute><FragmentsSettings /></ProtectedRoute>} />
               <Route path="/settings/support" element={<ProtectedRoute><SupportSettings /></ProtectedRoute>} />

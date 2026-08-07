@@ -18,6 +18,7 @@ import { useMeals, sumMeal } from '@/hooks/useMeals';
 import { getMealIcon } from '@/lib/mealIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useGame } from '@/contexts/GameContext';
 
 const MACRO_COLORS = {
   carbs: 'hsl(210 90% 60%)', // blue
@@ -32,19 +33,28 @@ interface NutritionTargets {
   carbs: { g: number; pct: number };
 }
 
-function computeTargets(plan: DietPlan): NutritionTargets {
+function computeTargets(
+  plan: DietPlan,
+  overrideWeight?: number,
+  overrideHeight?: number,
+  overrideAge?: number,
+): NutritionTargets {
+  const weight = overrideWeight ?? plan.weight;
+  const height = overrideHeight ?? plan.height;
+  const age = overrideAge ?? plan.age;
+
   const bmr =
     plan.gender === 'homem'
-      ? 88.36 + 13.4 * plan.weight + 4.8 * plan.height - 5.7 * plan.age
-      : 447.6 + 9.2 * plan.weight + 3.1 * plan.height - 4.3 * plan.age;
+      ? 88.36 + 13.4 * weight + 4.8 * height - 5.7 * age
+      : 447.6 + 9.2 * weight + 3.1 * height - 4.3 * age;
   const factor = { sedentario: 1.2, leve: 1.375, moderado: 1.55, intenso: 1.725 }[plan.activity];
   let kcal = bmr * factor;
   if (plan.goal === 'ganhar') kcal += 300;
   if (plan.goal === 'perder') kcal -= 300;
   kcal = Math.round(kcal);
 
-  const proteinG = Math.round(plan.weight * 2);
-  const fatG = Math.round(plan.weight * 1);
+  const proteinG = Math.round(weight * 2);
+  const fatG = Math.round(weight * 1);
   const proteinKcal = proteinG * 4;
   const fatKcal = fatG * 9;
   const carbsKcal = Math.max(0, kcal - proteinKcal - fatKcal);
@@ -67,6 +77,7 @@ const goalLabel: Record<DietPlan['goal'], string> = {
 
 export default function Diet() {
   const { user } = useAuth();
+  const { user: gameUser } = useGame();
   const navigate = useNavigate();
   const { meals, addMeal } = useMeals();
   const [plan, setPlan] = useState<DietPlan | null>(null);
@@ -119,7 +130,24 @@ export default function Diet() {
     }
   };
 
-  const targets = useMemo(() => (plan ? computeTargets(plan) : null), [plan]);
+  const currentWeight = gameUser?.weight ?? plan?.weight;
+  const currentHeight = gameUser?.height ?? plan?.height;
+  const currentAge = useMemo(() => {
+    if (!gameUser?.birthDate) return plan?.age;
+    const cleanDate = gameUser.birthDate.slice(0, 10);
+    const today = new Date();
+    const birth = new Date(cleanDate + 'T00:00:00');
+    if (isNaN(birth.getTime())) return plan?.age;
+    let a = today.getFullYear() - birth.getFullYear();
+    const m = today.getMonth() - birth.getMonth();
+    if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) a--;
+    return a >= 0 ? a : plan?.age;
+  }, [gameUser?.birthDate, plan?.age]);
+
+  const targets = useMemo(
+    () => (plan ? computeTargets(plan, currentWeight, currentHeight, currentAge) : null),
+    [plan, currentWeight, currentHeight, currentAge],
+  );
 
   const consumed = useMemo(
     () =>
@@ -287,7 +315,7 @@ export default function Diet() {
           <div className="mt-3 grid grid-cols-2 gap-2.5">
             {[
               { icon: Target, label: 'Objetivo', value: plan ? goalLabel[plan.goal] : '—' },
-              { icon: Weight, label: 'Peso atual', value: plan ? `${plan.weight}kg` : '—' },
+              { icon: Weight, label: 'Peso atual', value: currentWeight ? `${currentWeight}kg` : '—' },
             ].map((c) => (
               <div
                 key={c.label}

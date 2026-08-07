@@ -1,15 +1,36 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle } from 'lucide-react';
+import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle, Download } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+function dumpLocalStorage() {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k) out[k] = localStorage.getItem(k) || '';
+  }
+  return out;
+}
+
 export default function AccountSettings() {
   const navigate = useNavigate();
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [deleteInput, setDeleteInput] = useState('');
+
+  const exportData = () => {
+    const data = dumpLocalStorage();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `passe-batalha-export-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Dados exportados com sucesso!');
+  };
 
   const signOut = async () => {
     try { await supabase.auth.signOut(); } catch {}
@@ -57,6 +78,16 @@ export default function AccountSettings() {
             <span className="text-[10px] px-2 py-0.5 rounded-full border border-emerald-500/40 text-emerald-400 font-display uppercase">Ativa</span>
           </div>
         </div>
+
+        <button onClick={exportData} className="fantasy-card w-full p-4 flex items-center gap-4 hover:shadow-[0_0_15px_hsl(var(--primary)/0.25)] transition-shadow">
+          <div className="w-11 h-11 rounded-lg bg-primary/10 border border-primary/40 flex items-center justify-center">
+            <Download className="w-5 h-5 text-primary" />
+          </div>
+          <div className="text-left">
+            <p className="font-display uppercase tracking-wider text-sm">Exportar dados</p>
+            <p className="text-xs text-muted-foreground">Baixe todos os seus dados em formato JSON</p>
+          </div>
+        </button>
 
         <button onClick={signOut} className="fantasy-card w-full p-4 flex items-center gap-4 hover:shadow-[0_0_15px_hsl(var(--primary)/0.25)] transition-shadow">
           <div className="w-11 h-11 rounded-lg bg-primary/10 border border-primary/40 flex items-center justify-center">
