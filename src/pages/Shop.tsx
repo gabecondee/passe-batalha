@@ -1,119 +1,69 @@
-import { useMemo, useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useStreakReward } from '@/hooks/useStreakReward';
-import { Gem, ShoppingCart, Shirt, Shield, Lock, ArrowLeft, Sparkles, Gift, X } from 'lucide-react';
+import { useShop, ShopItem } from '@/hooks/useShop';
+import { Gem, ShoppingCart, Shirt, Shield, Lock, ArrowLeft, Sparkles, Gift, X, Calendar, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import coqueteleiraAsset from '@/assets/shop/coqueteleira.png.asset.json';
-import canecaAsset from '@/assets/shop/caneca.png.asset.json';
-import camisetaAsset from '@/assets/shop/camiseta.png.asset.json';
-import bloqueioAsset from '@/assets/shop/bloqueio.png.asset.json';
-import bloqueio2xAsset from '@/assets/shop/bloqueio-2x.png.asset.json';
-
-type ShopCategory = 'physical' | 'consumable';
-
-interface ShopItem {
-  id: string;
-  name: string;
-  description: string;
-  cost: number;
-  category: ShopCategory;
-  categoryLabel: string;
-  image: string;
-  shieldDays?: number;
-  badge?: string;
-  accent: 'gold' | 'blue';
-}
-
-const SHOP_ITEMS: ShopItem[] = [
-  {
-    id: 'shaker-ascensao',
-    name: 'Coqueteleira da Ascensão',
-    description: 'Criada para aqueles que seguem evoluindo, mesmo nos dias difíceis.',
-    cost: 3000,
-    category: 'physical',
-    categoryLabel: 'Recompensa Física',
-    image: coqueteleiraAsset.url,
-    accent: 'gold',
-  },
-  {
-    id: 'calice-constancia',
-    name: 'Cálice da Constância',
-    description: 'Toda grande transformação é construída dia após dia.',
-    cost: 5000,
-    category: 'physical',
-    categoryLabel: 'Recompensa Física',
-    image: canecaAsset.url,
-    accent: 'gold',
-  },
-  {
-    id: 'manto-reconstrutor',
-    name: 'Manto do Reconstrutor',
-    description: 'Não é apenas uma camiseta. É a prova de meses de batalha invisível.',
-    cost: 9000,
-    category: 'physical',
-    categoryLabel: 'Recompensa Física',
-    image: camisetaAsset.url,
-    accent: 'gold',
-  },
-  {
-    id: 'streak-shield-1',
-    name: 'Bloqueio de Constância',
-    description: 'Protege sua ofensiva por 1 dia caso você esqueça de realizar seu check diário.',
-    cost: 400,
-    category: 'consumable',
-    categoryLabel: 'Consumível',
-    image: bloqueioAsset.url,
-    shieldDays: 1,
-    accent: 'blue',
-  },
-  {
-    id: 'streak-shield-2',
-    name: 'Bloqueio de Constância X2',
-    description: 'Dois escudos de proteção para manter sua sequência viva.',
-    cost: 700,
-    category: 'consumable',
-    categoryLabel: 'Consumível',
-    image: bloqueio2xAsset.url,
-    shieldDays: 2,
-    accent: 'blue',
-  },
-];
 
 export default function Shop() {
   const navigate = useNavigate();
-  const { state, purchase } = useStreakReward();
+  const { state: streakState } = useStreakReward();
+  const {
+    visiblePhysicalItems,
+    visibleConsumableItems,
+    redeemedItemIds,
+    redemptionsMap,
+    redeemItem,
+    isLoading,
+  } = useShop();
+
   const [confirmItem, setConfirmItem] = useState<ShopItem | null>(null);
   const [successItem, setSuccessItem] = useState<ShopItem | null>(null);
+  const [detailsItem, setDetailsItem] = useState<ShopItem | null>(null);
+  const [showRedeemed, setShowRedeemed] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const grouped = useMemo(() => {
-    const groups: Record<ShopCategory, ShopItem[]> = { physical: [], consumable: [] };
-    SHOP_ITEMS.forEach((i) => groups[i.category].push(i));
-    return groups;
-  }, []);
+  // Split physical items into available vs redeemed
+  const availablePhysicalItems = useMemo(
+    () => visiblePhysicalItems.filter((i) => !redeemedItemIds.has(i.id)),
+    [visiblePhysicalItems, redeemedItemIds]
+  );
+
+  const redeemedPhysicalItems = useMemo(
+    () => visiblePhysicalItems.filter((i) => redeemedItemIds.has(i.id)),
+    [visiblePhysicalItems, redeemedItemIds]
+  );
 
   const openConfirm = (item: ShopItem) => {
-    if (state.total_fragments < item.cost) return;
+    if (streakState.total_fragments < item.cost) return;
     setConfirmItem(item);
   };
 
-  const confirmPurchase = () => {
+  const confirmPurchase = async () => {
     const item = confirmItem;
     if (!item) return;
-    const ok = purchase({ id: item.id, name: item.name, cost: item.cost, shieldDays: item.shieldDays });
-    if (!ok) {
-      toast.error('Fragmentos insuficientes.');
-      setConfirmItem(null);
-      return;
-    }
-    if (item.category === 'physical') {
-      // Keep dialog open, swap to success view
-      setSuccessItem(item);
-    } else {
-      toast.success(`🛡️ ${item.name} adicionado ao seu inventário!`);
-      setConfirmItem(null);
+
+    setIsSubmitting(true);
+    try {
+      const res = await redeemItem(item);
+      if (!res.success) {
+        toast.error(res.message || 'Erro ao resgatar item.');
+        setConfirmItem(null);
+        return;
+      }
+
+      if (item.category === 'physical') {
+        // Keep dialog open, swap to success view
+        setSuccessItem(item);
+      } else {
+        toast.success(`🛡️ ${item.name} adicionado ao seu inventário!`);
+        setConfirmItem(null);
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -122,25 +72,23 @@ export default function Shop() {
     setSuccessItem(null);
   };
 
-  const isPhysicalRedeemed = (item: ShopItem) =>
-    item.category === 'physical' && state.shop_purchases.some((p) => p.itemId === item.id);
-
   const renderCard = (item: ShopItem, idx: number) => {
-    const canAfford = state.total_fragments >= item.cost;
+    const canAfford = streakState.total_fragments >= item.cost;
     const isGold = item.accent === 'gold';
-    const redeemed = isPhysicalRedeemed(item);
+    const redeemed = item.category === 'physical' && redeemedItemIds.has(item.id);
+
     const accentClasses = isGold
       ? {
           border: redeemed
-            ? 'border-zinc-600/40 hover:border-zinc-500/60'
+            ? 'border-amber-500/50 hover:border-amber-400/80 bg-amber-950/10'
             : 'border-amber-500/40 hover:border-amber-400/70',
-          glow: redeemed ? '' : 'hover:shadow-[0_0_24px_rgba(245,158,11,0.25)]',
+          glow: redeemed ? 'hover:shadow-[0_0_20px_rgba(245,158,11,0.2)]' : 'hover:shadow-[0_0_24px_rgba(245,158,11,0.25)]',
           tag: 'border-amber-500/60 bg-black/70 text-amber-400',
           gem: 'text-amber-400',
           price: 'text-amber-400',
           badge: 'border-amber-400/70 bg-black/70 text-amber-300',
           imgFrame: redeemed
-            ? 'border-zinc-600/50 bg-gradient-to-br from-black to-zinc-900/50'
+            ? 'border-amber-500/50 bg-gradient-to-br from-black to-amber-950/40'
             : 'border-amber-500/40 bg-gradient-to-br from-black to-amber-950/30',
           button: canAfford
             ? 'border-amber-500/70 bg-amber-500 text-black hover:bg-amber-400'
@@ -168,13 +116,12 @@ export default function Shop() {
         className={cn(
           'relative overflow-hidden rounded-2xl border bg-[#0a0a0a] p-3 transition-all',
           accentClasses.border,
-          accentClasses.glow,
-          redeemed && 'opacity-80'
+          accentClasses.glow
         )}
       >
         <div className="flex items-stretch gap-3">
           {/* Image */}
-          <div className="relative shrink-0">
+          <div className="relative shrink-0 cursor-pointer" onClick={() => redeemed && setDetailsItem(item)}>
             <div
               className={cn(
                 'w-[110px] h-[110px] rounded-xl border overflow-hidden flex items-center justify-center',
@@ -182,17 +129,21 @@ export default function Shop() {
               )}
             >
               <img
-                src={item.image}
+                src={item.image_url}
                 alt={item.name}
-                className={cn('w-full h-full object-contain', redeemed && 'grayscale brightness-75')}
+                className={cn('w-full h-full object-cover', redeemed && 'brightness-90')}
               />
               <div
                 className={cn(
                   'absolute bottom-1.5 right-1.5 w-6 h-6 rounded-full border flex items-center justify-center',
-                  redeemed ? 'bg-zinc-800/90 border-zinc-600' : 'bg-black/80 border-white/10'
+                  redeemed ? 'bg-amber-500/90 border-amber-400' : 'bg-black/80 border-white/10'
                 )}
               >
-                <Lock className={cn('w-3 h-3', redeemed ? 'text-zinc-400' : 'text-muted-foreground')} />
+                {redeemed ? (
+                  <Gift className="w-3 h-3 text-black font-bold" />
+                ) : (
+                  <Lock className="w-3 h-3 text-muted-foreground" />
+                )}
               </div>
             </div>
           </div>
@@ -208,10 +159,14 @@ export default function Shop() {
 
             <div className="mt-auto flex items-center justify-between gap-2">
               {redeemed ? (
-                <div className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-md border border-zinc-600/60 bg-zinc-900/50 text-[10.5px] font-display tracking-[0.15em] uppercase text-zinc-400">
-                  <Lock className="w-3 h-3" />
-                  Item já resgatado!
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setDetailsItem(item)}
+                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-[10.5px] font-display tracking-[0.15em] uppercase text-amber-300 transition-all cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+                >
+                  <Gift className="w-3.5 h-3.5 text-amber-400" />
+                  Ver Detalhes do Resgate
+                </button>
               ) : (
                 <>
                   <div className="flex items-center gap-1.5">
@@ -260,7 +215,7 @@ export default function Shop() {
           <div className="flex items-center gap-2 px-3 h-11 rounded-xl border border-sky-500/40 bg-[#0a0a0a]">
             <Gem className="w-4 h-4 text-sky-400" />
             <span className="font-display text-base text-sky-300">
-              {state.total_fragments.toLocaleString('pt-BR')}
+              {streakState.total_fragments.toLocaleString('pt-BR')}
             </span>
           </div>
         </div>
@@ -282,31 +237,72 @@ export default function Shop() {
           </p>
         </motion.div>
 
-        {/* Physical Rewards */}
-        <section className="mb-8">
-          <div className="flex items-center gap-2 mb-3 px-1">
-            <Shirt className="w-5 h-5 text-amber-400" />
-            <h2 className="font-display text-sm tracking-[0.28em] uppercase text-amber-400">
-              Recompensas Físicas
-            </h2>
-          </div>
-          <div className="space-y-3">{grouped.physical.map(renderCard)}</div>
-        </section>
+        {/* Recompensas Físicas Disponíveis */}
+        {availablePhysicalItems.length > 0 && (
+          <section className="mb-8">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Shirt className="w-5 h-5 text-amber-400" />
+              <h2 className="font-display text-sm tracking-[0.28em] uppercase text-amber-400">
+                Recompensas Físicas
+              </h2>
+            </div>
+            <div className="space-y-3">{availablePhysicalItems.map(renderCard)}</div>
+          </section>
+        )}
 
-        {/* Consumables */}
-        <section className="mb-4">
-          <div className="flex items-center gap-2 mb-3 px-1">
-            <Shield className="w-5 h-5 text-sky-400" />
-            <h2 className="font-display text-sm tracking-[0.28em] uppercase text-sky-400">
-              Consumíveis
-            </h2>
-          </div>
-          <div className="space-y-3">{grouped.consumable.map(renderCard)}</div>
-        </section>
+        {/* Consumíveis */}
+        {visibleConsumableItems.length > 0 && (
+          <section className="mb-8">
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Shield className="w-5 h-5 text-sky-400" />
+              <h2 className="font-display text-sm tracking-[0.28em] uppercase text-sky-400">
+                Consumíveis
+              </h2>
+            </div>
+            <div className="space-y-3">{visibleConsumableItems.map(renderCard)}</div>
+          </section>
+        )}
 
-        {state.streak_shields > 0 && (
+        {/* Recompensas Resgatadas (Colapsado por padrão) */}
+        {redeemedPhysicalItems.length > 0 && (
+          <section className="mb-6">
+            <button
+              type="button"
+              onClick={() => setShowRedeemed((prev) => !prev)}
+              className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-zinc-800 bg-zinc-900/60 hover:bg-zinc-800/60 transition cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-2">
+                <Gift className="w-4.5 h-4.5 text-amber-400" />
+                <span className="font-display text-xs tracking-[0.2em] uppercase text-zinc-300 font-semibold">
+                  Recompensas Resgatadas ({redeemedPhysicalItems.length})
+                </span>
+              </div>
+              <ChevronDown
+                className={cn(
+                  'w-4 h-4 text-zinc-400 transition-transform duration-200',
+                  showRedeemed && 'rotate-180'
+                )}
+              />
+            </button>
+
+            <AnimatePresence>
+              {showRedeemed && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden space-y-3 pt-3"
+                >
+                  {redeemedPhysicalItems.map(renderCard)}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </section>
+        )}
+
+        {streakState.streak_shields > 0 && (
           <p className="mt-4 text-center text-xs text-sky-300/80 font-display tracking-wider">
-            🛡️ Você possui {state.streak_shields} {state.streak_shields === 1 ? 'escudo' : 'escudos'} de constância no inventário
+            🛡️ Você possui {streakState.streak_shields} {streakState.streak_shields === 1 ? 'escudo' : 'escudos'} de constância no inventário
           </p>
         )}
       </div>
@@ -354,7 +350,7 @@ export default function Shop() {
                   </p>
                   <button
                     onClick={closeDialog}
-                    className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md border border-amber-500/70 bg-amber-500 text-black text-xs font-display tracking-[0.25em] uppercase hover:bg-amber-400 transition"
+                    className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md border border-amber-500/70 bg-amber-500 text-black text-xs font-display tracking-[0.25em] uppercase hover:bg-amber-400 transition font-semibold"
                   >
                     Entendi
                   </button>
@@ -362,7 +358,7 @@ export default function Shop() {
               ) : (
                 <>
                   <div className="mx-auto w-14 h-14 rounded-xl border border-white/10 bg-black/60 overflow-hidden flex items-center justify-center mb-4">
-                    <img src={confirmItem.image} alt={confirmItem.name} className="w-full h-full object-contain" />
+                    <img src={confirmItem.image_url} alt={confirmItem.name} className="w-full h-full object-cover" />
                   </div>
                   <h3 className="font-display text-base tracking-[0.2em] uppercase text-foreground mb-2">
                     Confirmar resgate
@@ -380,24 +376,97 @@ export default function Shop() {
                   <div className="flex gap-2">
                     <button
                       onClick={closeDialog}
-                      className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md border border-white/15 bg-black/60 text-xs font-display tracking-[0.2em] uppercase text-muted-foreground hover:border-white/30 transition"
+                      disabled={isSubmitting}
+                      className="flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md border border-white/15 bg-black/60 text-xs font-display tracking-[0.2em] uppercase text-muted-foreground hover:border-white/30 transition disabled:opacity-50"
                     >
                       Cancelar
                     </button>
                     <button
                       onClick={confirmPurchase}
+                      disabled={isSubmitting}
                       className={cn(
-                        'flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md border text-xs font-display tracking-[0.2em] uppercase transition',
+                        'flex-1 inline-flex items-center justify-center px-4 py-2.5 rounded-md border text-xs font-display tracking-[0.2em] uppercase transition disabled:opacity-50',
                         confirmItem.accent === 'gold'
-                          ? 'border-amber-500/70 bg-amber-500 text-black hover:bg-amber-400'
-                          : 'border-sky-500/70 bg-sky-500 text-black hover:bg-sky-400'
+                          ? 'border-amber-500/70 bg-amber-500 text-black hover:bg-amber-400 font-semibold'
+                          : 'border-sky-500/70 bg-sky-500 text-black hover:bg-sky-400 font-semibold'
                       )}
                     >
-                      Confirmar
+                      {isSubmitting ? 'Processando...' : 'Confirmar'}
                     </button>
                   </div>
                 </>
               )}
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* Modal de Detalhes do Resgate para itens já resgatados */}
+        {detailsItem && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setDetailsItem(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="relative w-full max-w-sm rounded-2xl border border-amber-500/60 bg-[#0a0a0a] p-6 text-center shadow-[0_0_40px_rgba(245,158,11,0.35)]"
+            >
+              <button
+                onClick={() => setDetailsItem(null)}
+                className="absolute top-3 right-3 w-8 h-8 rounded-full border border-white/10 bg-black/60 flex items-center justify-center hover:border-white/30 transition"
+                aria-label="Fechar"
+              >
+                <X className="w-4 h-4 text-muted-foreground" />
+              </button>
+
+              <div className="mx-auto w-20 h-20 rounded-xl border border-amber-500/50 bg-black/60 overflow-hidden flex items-center justify-center mb-3">
+                <img
+                  src={detailsItem.image_url}
+                  alt={detailsItem.name}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              <h3 className="font-display text-lg tracking-[0.25em] uppercase text-amber-400 mb-1">
+                {detailsItem.name}
+              </h3>
+
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-[11px] font-display uppercase tracking-wider text-amber-300 mb-4">
+                <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                <span>
+                  Resgatado em:{' '}
+                  {redemptionsMap.get(detailsItem.id)?.created_at
+                    ? new Date(
+                        redemptionsMap.get(detailsItem.id)!.created_at
+                      ).toLocaleDateString('pt-BR', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })
+                    : 'Data não registrada'}
+                </span>
+              </div>
+
+              <p className="text-sm text-foreground/90 font-medium mb-2">
+                Muito bem, guerreiro!
+              </p>
+              <p className="text-[13px] text-muted-foreground leading-relaxed mb-6">
+                Tire um print dessa tela e entre em contato com o mestre da Guilda através da nossa comunidade para resgatar sua recompensa.
+              </p>
+
+              <button
+                onClick={() => setDetailsItem(null)}
+                className="w-full inline-flex items-center justify-center px-4 py-2.5 rounded-md border border-amber-500/70 bg-amber-500 text-black text-xs font-display tracking-[0.25em] uppercase hover:bg-amber-400 transition font-semibold"
+              >
+                Entendi
+              </button>
             </motion.div>
           </motion.div>
         )}
