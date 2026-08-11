@@ -1,5 +1,6 @@
-// Generate a full Boss (name, description, abilities, weaknesses, 30-day campaign,
-// image prompt + generated portrait) from a small quiz using Lovable AI Gateway.
+// Supabase Edge Function: generate-boss
+// Generates a full RPG Boss using OpenAI GPT-4o / GPT-4o-mini API and image generator.
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -9,6 +10,7 @@ type Difficulty = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
 interface QuizInput {
   problem: string;
+  attributeArea: string;
   timeScore: 1 | 2 | 3 | 4;
   frequencyScore: 1 | 2 | 3 | 4;
   impactScore: 1 | 2 | 3 | 4;
@@ -24,7 +26,7 @@ const RARITY_LABELS: Record<Difficulty, string> = {
 };
 
 const REWARDS: Record<Difficulty, { xp: number; penalty: number; maxFails: number }> = {
-  common: { xp: 50, penalty: 50, maxFails: 10 },
+  common: { xp: 100, penalty: 50, maxFails: 10 },
   uncommon: { xp: 300, penalty: 100, maxFails: 7 },
   rare: { xp: 600, penalty: 200, maxFails: 5 },
   epic: { xp: 1100, penalty: 350, maxFails: 3 },
@@ -50,130 +52,136 @@ Deno.serve(async (req) => {
       });
     }
 
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) throw new Error("LOVABLE_API_KEY not configured");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const apiKey = openaiApiKey || lovableApiKey;
 
     const total = input.timeScore + input.frequencyScore + input.impactScore + input.attemptsScore;
     const difficulty = classify(total);
     const rewards = REWARDS[difficulty];
+    const attributeArea = input.attributeArea || "Mental";
 
-    // === 1. Generate boss content via Gemini (JSON) ===
-    const masterPrompt = `Você é um especialista em Psicologia Comportamental, TCC, Neurociência aplicada, Gamificação e narrativas RPG.
+    // === 1. Master Prompt GPT ===
+    const masterPrompt = `Você é um especialista em Psicologia Comportamental, TCC (Terapia Cognitivo-Comportamental), Neurociência aplicada e narrativas RPG Dark Fantasy.
 
-Transforme o problema pessoal abaixo em um CHEFÃO RPG completo para o app "Passe de Batalha", em português brasileiro.
+Transforme o problema pessoal abaixo em um CHEFÃO RPG soberbo para o aplicativo "Passe de Batalha", em português brasileiro.
 
-Problema/Vício: ${input.problem}
-Raridade já calculada: ${RARITY_LABELS[difficulty]} (pontuação ${total}/16)
+Problema/Vício do Usuário: "${input.problem}"
+Área de Atributo Afetada: "${attributeArea}"
+Dificuldade/Raridade: ${RARITY_LABELS[difficulty]} (Pontuação ${total}/16)
 
-Retorne APENAS um JSON válido (sem markdown, sem \`\`\`) com esta estrutura EXATA:
+Retorne APENAS um JSON válido (sem markdown, sem \`\`\`json) com esta estrutura EXATA:
 {
-  "name": "Nome épico, ex: Morth'Zul - O Devorador de Vitalidade",
-  "shortName": "Somente o nome principal, ex: Morth'Zul",
+  "name": "Nome Épico do Boss, ex: MORTH'ZUL - O Devorador de Vitalidade",
+  "shortName": "Apenas o nome principal",
   "class": "${input.problem}",
-  "description": "Entre 50 e 120 palavras. Tom sombrio. Explique quem é, como surgiu, como age, comportamentos que representa e recursos mentais que consome.",
-  "origin": "Máximo 50 palavras.",
+  "description": "Entre 50 e 100 palavras. Tom sombrio, imersivo e psicológico. Explique quem é o Boss, como ele se manifesta e de qual recurso mental/emocional se alimenta.",
+  "origin": "Entre 20 e 40 palavras. Explique a origem mística/psicológica do boss.",
   "abilities": [
-    { "name": "...", "description": "curta" },
-    { "name": "...", "description": "curta" },
-    { "name": "...", "description": "curta" },
-    { "name": "...", "description": "curta" }
+    { "name": "Nome da Habilidade 1", "description": "Descrição curta do ataque comportamental" },
+    { "name": "Nome da Habilidade 2", "description": "..." },
+    { "name": "Nome da Habilidade 3", "description": "..." },
+    { "name": "Nome da Habilidade 4", "description": "..." }
   ],
   "weaknesses": [
-    { "name": "...", "description": "baseada em TCC/Psicologia Comportamental/Neurociência" },
-    { "name": "...", "description": "..." },
-    { "name": "...", "description": "..." },
-    { "name": "...", "description": "..." }
+    { "name": "Nome da Fraqueza 1", "description": "Estratégia prática baseada em TCC/Neurociência" },
+    { "name": "Nome da Fraqueza 2", "description": "..." },
+    { "name": "Nome da Fraqueza 3", "description": "..." },
+    { "name": "Nome da Fraqueza 4", "description": "..." }
   ],
-  "imagePrompt": "Prompt em INGLÊS para gerar a imagem do boss: RPG dark fantasy, cinematic, extremely detailed, vertical portrait, no text, no UI, sombrio, simbolicamente inspirado em '${input.problem}'.",
+  "imagePrompt": "Detailed DALL-E image prompt in ENGLISH: Dark fantasy RPG boss monster portrait, cinematic lighting, epic digital art, 8k resolution, vertical composition, symbolising '${input.problem}', highly detailed, dark atmosphere, no text, no UI.",
   "campaign": [
-    { "day": 1, "attackName": "Golpe da Consciência", "action": "prática, curta, mensurável" },
-    ... EXATAMENTE 30 dias ...
-    { "day": 30, "attackName": "...", "action": "..." }
+    { "day": 1, "attackName": "Golpe da Consciência", "action": "Ação prática diária mensurável para o dia 1" },
+    ... EXATAMENTE 30 DIAS (dia 1 a 30) ...
+    { "day": 30, "attackName": "Golpe Final", "action": "Ação de consolidação para o dia 30" }
   ]
 }
 
-REGRAS OBRIGATÓRIAS da campanha de 30 dias:
-- Dias 1-7 = Consciência
-- Dias 8-14 = Redução de gatilhos
-- Dias 15-21 = Substituição comportamental
-- Dias 22-30 = Consolidação
-- Cada ação: prática, curta, objetiva, mensurável, progressiva.
-- SEM espiritualidade, SEM pseudociência, SEM frases motivacionais genéricas.
-- EXATAMENTE 30 objetos no array "campaign".
-- EXATAMENTE 4 habilidades e 4 fraquezas.
+REGRAS DA CAMPANHA DE 30 DIAS:
+- Dias 1-7: Fase 1 (Consciência & Mapeamento de Gatilhos)
+- Dias 8-14: Fase 2 (Redução de Estímulos & Barreira Física)
+- Dias 15-21: Fase 3 (Substituição Comportamental Ativa)
+- Dias 22-30: Fase 4 (Consolidação & Fortalecimento de Identidade)
+- Exatamente 30 itens no array "campaign".
+- Exatamente 4 habilidades e 4 fraquezas.
+- Sem espiritualidade genérica, sem frase motivacional vazia. Ações práticas e objetivas.`;
 
-Responda SOMENTE o JSON puro, nada mais.`;
+    let bossContent: any = null;
 
-    const textResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [{ role: "user", content: masterPrompt }],
-        response_format: { type: "json_object" },
-      }),
-    });
-
-    if (!textResp.ok) {
-      const detail = await textResp.text();
-      return new Response(JSON.stringify({ error: "AI text generation failed", detail }), {
-        status: textResp.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const textData = await textResp.json();
-    const rawContent = textData.choices?.[0]?.message?.content ?? "";
-    let bossContent: any;
-    try {
-      bossContent = JSON.parse(rawContent);
-    } catch {
-      // Try to strip markdown fencing if the model included any
-      const cleaned = rawContent.replace(/```json\s*|\s*```/g, "").trim();
-      bossContent = JSON.parse(cleaned);
-    }
-
-    // Validation
-    if (
-      !bossContent?.name ||
-      !bossContent?.description ||
-      !Array.isArray(bossContent?.abilities) || bossContent.abilities.length < 4 ||
-      !Array.isArray(bossContent?.weaknesses) || bossContent.weaknesses.length < 4 ||
-      !Array.isArray(bossContent?.campaign) || bossContent.campaign.length !== 30 ||
-      !bossContent?.imagePrompt
-    ) {
-      return new Response(JSON.stringify({ error: "Incomplete AI response", raw: bossContent }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // === 2. Generate the boss portrait ===
-    let portraitDataUrl: string | null = null;
-    try {
-      const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    if (openaiApiKey) {
+      // Direct OpenAI GPT API Call
+      const textResp = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [{
-            role: "user",
-            content: [{ type: "text", text: bossContent.imagePrompt }],
-          }],
-          modalities: ["image", "text"],
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: masterPrompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.7,
         }),
       });
-      if (imgResp.ok) {
-        const imgData = await imgResp.json();
-        portraitDataUrl = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url ?? null;
+
+      if (textResp.ok) {
+        const textData = await textResp.json();
+        const rawContent = textData.choices?.[0]?.message?.content ?? "";
+        bossContent = JSON.parse(rawContent);
       }
-    } catch (e) {
-      console.error("image gen failed", e);
+    } else if (lovableApiKey) {
+      // Gateway Fallback
+      const textResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [{ role: "user", content: masterPrompt }],
+          response_format: { type: "json_object" },
+        }),
+      });
+
+      if (textResp.ok) {
+        const textData = await textResp.json();
+        const rawContent = textData.choices?.[0]?.message?.content ?? "";
+        bossContent = JSON.parse(rawContent);
+      }
+    }
+
+    // === 2. Generate Boss Portrait Image ===
+    let portraitUrl: string | null = null;
+    const promptText = bossContent?.imagePrompt || `Dark fantasy RPG boss monster portrait representing ${input.problem}, cinematic lighting, detailed digital art, vertical portrait, dark aura, no text`;
+
+    if (openaiApiKey && bossContent?.imagePrompt) {
+      try {
+        const imgResp = await fetch("https://api.openai.com/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "dall-e-3",
+            prompt: bossContent.imagePrompt,
+            n: 1,
+            size: "1024x1024",
+            quality: "standard",
+          }),
+        });
+        if (imgResp.ok) {
+          const imgData = await imgResp.json();
+          portraitUrl = imgData.data?.[0]?.url || null;
+        }
+      } catch (e) {
+        console.error("DALL-E image generation error:", e);
+      }
+    }
+
+    // Fallback to high-quality RPG Pollinations image generation if DALL-E key is not present or failed
+    if (!portraitUrl) {
+      const cleanPrompt = encodeURIComponent(`${input.problem} dark fantasy rpg boss monster portrait cinematic detailed 8k`);
+      portraitUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=512&height=512&seed=${Date.now()}&nologo=true`;
     }
 
     const result = {
       difficulty,
       totalScore: total,
       rewards,
-      portraitDataUrl,
+      portraitUrl,
       boss: bossContent,
     };
 

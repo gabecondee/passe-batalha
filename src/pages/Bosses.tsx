@@ -2,9 +2,9 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { PageTransition } from '@/components/layout/PageTransition';
 import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
-import { difficultyLabels, difficultyColors } from '@/types/boss';
+import { difficultyLabels } from '@/types/boss';
 import { cn } from '@/lib/utils';
-import { Skull, Trophy, XCircle, Star, ChevronRight, Lock, Plus, ScrollText, LayoutGrid, Trash2, User } from 'lucide-react';
+import { Skull, Trophy, XCircle, Star, ChevronRight, Lock, Plus, ScrollText, Trash2, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -19,6 +19,14 @@ const CLASS_LABELS: Record<string, string> = {
   rogue: 'Ladino', paladin: 'Paladino', monk: 'Monge',
 };
 
+const AREA_BADGES: Record<string, { icon: string; color: string }> = {
+  'Espiritual': { icon: '✨', color: 'bg-amber-500/10 text-amber-400 border-amber-400/30' },
+  'Mental': { icon: '🧠', color: 'bg-purple-500/10 text-purple-400 border-purple-400/30' },
+  'Profissional': { icon: '💼', color: 'bg-green-500/10 text-green-400 border-green-400/30' },
+  'Físico': { icon: '💪', color: 'bg-blue-500/10 text-blue-400 border-blue-400/30' },
+  'Financeiro': { icon: '💰', color: 'bg-emerald-500/10 text-emerald-400 border-emerald-400/30' },
+};
+
 export default function Bosses() {
   const { user } = useGame();
   const { bosses, battles, getBattle, deleteBoss } = useBoss();
@@ -28,8 +36,8 @@ export default function Bosses() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const userClass = (typeof window !== 'undefined' ? localStorage.getItem('user_class') : '') || '';
-  const classLabel = CLASS_LABELS[userClass] || 'Aventureiro';
+  const rawClass = user.userClass || (typeof window !== 'undefined' ? localStorage.getItem('user_class') : '') || '';
+  const classLabel = CLASS_LABELS[rawClass] || rawClass || 'Aventureiro';
 
   const wins = bosses.reduce((sum, b) => sum + (getBattle(b.id).wins || 0), 0);
   const losses = bosses.reduce((sum, b) => sum + (getBattle(b.id).losses || 0), 0);
@@ -102,70 +110,54 @@ export default function Bosses() {
               </div>
             </div>
 
-            {/* Vitórias/Derrotas centralizado */}
-            <div className="mt-4 pt-4 border-t border-amber-400/20 grid grid-cols-2 gap-2">
-              <div className="flex flex-col items-center gap-1">
-                <Trophy className="w-8 h-8 text-green-400" />
-                <span className="text-xs text-muted-foreground">Vitórias</span>
-                <span className="text-green-400 font-bold text-lg">{wins}</span>
+            {/* Vitórias / Derrotas */}
+            <div className="mt-4 pt-3 border-t border-border/40 grid grid-cols-2 gap-3 text-center">
+              <div className="p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                <div className="flex items-center justify-center gap-1.5 text-green-400 font-bold">
+                  <Trophy className="w-4 h-4" />
+                  <span>{wins}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Vitórias</p>
               </div>
-              <div className="flex flex-col items-center gap-1">
-                <XCircle className="w-8 h-8 text-red-400" />
-                <span className="text-xs text-muted-foreground">Derrotas</span>
-                <span className="text-red-400 font-bold text-lg">{losses}</span>
+              <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                <div className="flex items-center justify-center gap-1.5 text-red-400 font-bold">
+                  <XCircle className="w-4 h-4" />
+                  <span>{losses}</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-0.5">Derrotas</p>
               </div>
             </div>
           </div>
 
-          {/* Criar novo boss */}
+          {/* Botão Criar Chefão */}
           <Button
-            variant="outline"
-            className="w-full border-dashed border-amber-400/50 text-amber-400 hover:bg-amber-400/10 h-14 tracking-[0.2em] uppercase font-bold animate-fade-in"
             onClick={() => setQuizOpen(true)}
+            className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-bold tracking-wider uppercase text-sm gap-2 shadow-[0_0_20px_hsl(var(--primary)/0.3)]"
           >
-            <Plus className="w-5 h-5 mr-2" />
+            <Plus className="w-5 h-5" />
             Criar Novo Boss
           </Button>
-          <BossQuizDialog open={quizOpen} onOpenChange={setQuizOpen} />
 
           {/* Filtros */}
-          <div className="grid grid-cols-2 gap-3 animate-fade-in">
-            <button
-              onClick={() => setFilter('all')}
-              className={cn(
-                'h-14 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-all',
-                filter === 'all'
-                  ? 'border-amber-400/70 bg-amber-400/10 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.2)]'
-                  : 'border-border/50 bg-card/60 text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <LayoutGrid className="w-4 h-4" />
-              Todos
-            </button>
-            <button
-              onClick={() => setFilter('active')}
-              className={cn(
-                'h-14 rounded-xl border flex items-center justify-center gap-2 text-sm font-medium transition-all',
-                filter === 'active'
-                  ? 'border-amber-400/70 bg-amber-400/10 text-amber-400 shadow-[0_0_16px_rgba(245,158,11,0.2)]'
-                  : 'border-border/50 bg-card/60 text-muted-foreground hover:text-foreground'
-              )}
-            >
-              <Skull className="w-4 h-4" />
-              Em Batalha
-            </button>
-          </div>
-
-          {/* Divisor */}
-          <div className="animate-fade-in space-y-2">
-            <div className="flex items-center gap-3">
-              <div className="flex-1 h-px bg-gradient-to-r from-transparent to-amber-400/40" />
-              <h2 className="font-display text-sm tracking-[0.3em] uppercase text-amber-400">Teste sua Coragem</h2>
-              <div className="flex-1 h-px bg-gradient-to-l from-transparent to-amber-400/40" />
+          <div className="flex items-center justify-between gap-2 border-b border-border/40 pb-2">
+            <div className="flex gap-2">
+              <Button
+                variant={filter === 'all' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFilter('all')}
+                className="h-8 text-xs font-semibold uppercase tracking-wider"
+              >
+                Todos ({bosses.length})
+              </Button>
+              <Button
+                variant={filter === 'active' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setFilter('active')}
+                className="h-8 text-xs font-semibold uppercase tracking-wider"
+              >
+                Em Batalha ({Object.values(battles).filter(b => b.status === 'active').length})
+              </Button>
             </div>
-            <p className="text-xs text-muted-foreground text-center px-4">
-              Atenção! Só é possível enfrentar um BOSS por vez, portanto escolha suas batalhas com sabedoria.
-            </p>
           </div>
 
           {/* Boss list */}
@@ -175,7 +167,7 @@ export default function Bosses() {
               const battle = getBattle(boss.id);
               const inBattle = battle.status === 'active';
 
-              // Split "Nome - Subtítulo" (aceita "-", "–" ou ":", com ou sem espaços)
+              // Split "Nome - Subtítulo"
               const splitMatch = boss.name.match(/^(.*?)\s*[-–:]\s*(.+)$/);
               const displayName = (splitMatch ? splitMatch[1] : boss.name).trim();
               const subtitle = (splitMatch ? splitMatch[2] : '').trim();
@@ -192,6 +184,7 @@ export default function Bosses() {
               };
               const starsCount = difficultyStars[boss.difficulty] ?? 1;
               const badge = difficultyBadgeColors[boss.difficulty] ?? difficultyBadgeColors.common;
+              const areaBadge = AREA_BADGES[boss.attributeArea] || AREA_BADGES['Mental'];
 
               return (
                 <button
@@ -219,12 +212,17 @@ export default function Bosses() {
                             {isLocked ? (
                               <Lock className="w-6 h-6 text-muted-foreground" />
                             ) : boss.portrait ? (
-                              <img src={boss.portrait} alt={displayName} className="w-full h-full object-cover" loading="lazy" />
+                              <img 
+                                src={boss.portrait} 
+                                alt={displayName} 
+                                className="w-full h-full object-cover" 
+                                loading="lazy" 
+                                onError={(e) => { e.currentTarget.src = '/images/bosses/boss-morthzul.jpg' }}
+                              />
                             ) : (
                               <Skull className={cn('w-8 h-8', boss.defeated ? 'text-green-400' : 'text-amber-400')} />
                             )}
                           </div>
-                          {/* Badge de dificuldade */}
                           {!isLocked && (
                             <span className={cn(
                               'absolute -top-1 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-md border text-[9px] font-bold tracking-wider uppercase whitespace-nowrap',
@@ -234,7 +232,6 @@ export default function Bosses() {
                             </span>
                           )}
                         </div>
-                        {/* Estrelas de dificuldade */}
                         {!isLocked && (
                           <div className="flex items-center gap-0.5">
                             {Array.from({ length: starsCount }).map((_, i) => (
@@ -245,25 +242,33 @@ export default function Bosses() {
                       </div>
 
                       <div className="flex-1 min-w-0">
-                        <h3 className={cn(
-                          'font-bold text-base uppercase tracking-wide leading-tight',
-                          isLocked ? 'text-muted-foreground' : boss.defeated ? 'text-muted-foreground line-through' : 'text-foreground'
-                        )}>
-                          {isLocked ? '???' : displayName}
-                        </h3>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className={cn(
+                            'font-bold text-base uppercase tracking-wide leading-tight',
+                            isLocked ? 'text-muted-foreground' : boss.defeated ? 'text-muted-foreground line-through' : 'text-foreground'
+                          )}>
+                            {isLocked ? '???' : displayName}
+                          </h3>
+                          {!isLocked && boss.attributeArea && (
+                            <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1', areaBadge.color)}>
+                              <span>{areaBadge.icon}</span>
+                              <span>{boss.attributeArea}</span>
+                            </span>
+                          )}
+                        </div>
                         {!isLocked && subtitle && (
                           <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
                         )}
                         <div className="mt-2 space-y-1 text-xs">
                           <p className="text-muted-foreground">
-                            <span className="text-foreground/80 font-semibold">Classe:</span>{' '}
+                            <span className="text-foreground/80 font-semibold">Problema:</span>{' '}
                             <span className="text-amber-400">{isLocked ? '???' : boss.class}</span>
                           </p>
                           {!isLocked && (
                             <p className="flex items-center gap-1 text-muted-foreground">
                               <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400/60" />
-                              <span className="text-foreground/80 text-xs">:</span>
-                              <span className="text-amber-400 font-semibold">+{boss.xpReward}XP</span>
+                              <span className="text-foreground/80 text-xs">Recompensa:</span>
+                              <span className="text-amber-400 font-semibold">+{boss.xpReward} XP em {boss.attributeArea}</span>
                             </p>
                           )}
                           {isLocked && boss.requiredLevel && (
@@ -280,7 +285,7 @@ export default function Bosses() {
                             Em Batalha
                           </span>
                         )}
-                        {boss.id.startsWith('boss-custom-') && !isLocked && (
+                        {!boss.isSystem && !isLocked && (
                           <span
                             role="button"
                             tabIndex={0}
@@ -303,44 +308,34 @@ export default function Bosses() {
                 </button>
               );
             })}
-            {visibleBosses.length === 0 && (
-              <p className="text-center text-sm text-muted-foreground py-8">
-                Nenhum chefão em batalha no momento.
-              </p>
-            )}
           </div>
 
-          {/* Histórico */}
+          {/* Modal Histórico */}
           <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
             <DialogContent className="bg-card border-border/50 max-w-md">
               <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-amber-400 font-display tracking-wider uppercase">
-                  <ScrollText className="w-4 h-4" />
+                <DialogTitle className="font-display text-lg tracking-wider uppercase text-amber-400 flex items-center gap-2">
+                  <ScrollText className="w-5 h-5" />
                   Histórico de Batalhas
                 </DialogTitle>
               </DialogHeader>
-              <div className="space-y-2 max-h-[60vh] overflow-y-auto pt-2">
+              <div className="space-y-3 pt-2 max-h-[60vh] overflow-y-auto">
                 {history.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-6">
-                    Nenhuma batalha finalizada ainda.
+                  <p className="text-center text-sm text-muted-foreground py-6">
+                    Nenhuma batalha concluída ainda.
                   </p>
                 ) : (
                   history.map((h, i) => (
-                    <div key={i} className={cn(
-                      'p-3 rounded-lg border flex items-center justify-between',
-                      h.status === 'won'
-                        ? 'border-green-500/30 bg-green-500/5'
-                        : 'border-red-500/30 bg-red-500/5'
-                    )}>
+                    <div key={i} className="p-3 rounded-lg bg-background/50 border border-border/40 flex items-center justify-between text-xs">
                       <div>
-                        <p className="text-sm font-semibold">{h.bossName}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {h.startedAt ? new Date(h.startedAt).toLocaleDateString('pt-BR') : '—'}
+                        <p className="font-semibold text-foreground">{h.bossName}</p>
+                        <p className="text-muted-foreground text-[10px] mt-0.5">
+                          {h.startedAt ? new Date(h.startedAt).toLocaleDateString('pt-BR') : 'Data N/D'}
                         </p>
                       </div>
                       <span className={cn(
-                        'text-xs font-bold uppercase tracking-wider px-2 py-1 rounded-md',
-                        h.status === 'won' ? 'text-green-400 bg-green-500/10' : 'text-red-400 bg-red-500/10'
+                        'px-2 py-0.5 rounded text-[10px] font-bold uppercase border',
+                        h.status === 'won' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
                       )}>
                         {h.status === 'won' ? 'Vitória' : 'Derrota'}
                       </span>
@@ -351,19 +346,24 @@ export default function Bosses() {
             </DialogContent>
           </Dialog>
 
-          {/* Confirmação de exclusão */}
-          <AlertDialog open={deleteId !== null} onOpenChange={(o) => !o && setDeleteId(null)}>
+          {/* Modal Excluir */}
+          <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
             <AlertDialogContent>
               <AlertDialogHeader>
                 <AlertDialogTitle>Excluir Chefão</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Tem certeza que deseja excluir este Chefão? Esta ação não poderá ser desfeita.
+                  Tem certeza que deseja excluir este Chefão? Esta ação não pode ser desfeita e removerá o registro no banco de dados.
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancelar</AlertDialogCancel>
                 <AlertDialogAction
-                  onClick={() => { if (deleteId) deleteBoss(deleteId); setDeleteId(null); }}
+                  onClick={() => {
+                    if (deleteId) {
+                      deleteBoss(deleteId);
+                      setDeleteId(null);
+                    }
+                  }}
                   className="bg-red-500 hover:bg-red-600 text-white"
                 >
                   Excluir
@@ -371,6 +371,10 @@ export default function Bosses() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Quiz Dialog */}
+          <BossQuizDialog open={quizOpen} onOpenChange={setQuizOpen} />
+
         </div>
       </PageTransition>
     </MainLayout>

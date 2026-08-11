@@ -1,5 +1,7 @@
 export type BossDifficulty = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 
+export type AttributeArea = 'Mental' | 'Físico' | 'Espiritual' | 'Profissional' | 'Financeiro';
+
 export interface BossAbility {
   name: string;
   description: string;
@@ -19,7 +21,6 @@ export interface BossRules {
   maxFails?: number;
 }
 
-
 export interface BossDayTask {
   day: number;
   action: string;
@@ -31,8 +32,12 @@ export interface Boss {
   class: string;
   vice: string;
   difficulty: BossDifficulty;
+  attributeArea: AttributeArea;
   defeated: boolean;
   xpReward: number;
+  penaltyXp?: number;
+  maxFails?: number;
+  isSystem?: boolean;
   requiredLevel?: number;
   portrait?: string;
   description?: string;

@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
-import { Boss } from '@/types/boss';
-import { mockBosses } from '@/data/bossData';
+import { Boss, AttributeArea } from '@/types/boss';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
@@ -38,17 +37,16 @@ interface BossContextType {
   getProgress: (bossId: string) => number;
   getActiveBattles: () => { boss: Boss; battle: BossBattle }[];
   getTodayBossAction: (bossId: string) => BattleDay | null;
-  addBoss: (boss: Boss) => void;
+  addBoss: (boss: Boss) => Promise<void>;
   deleteBoss: (bossId: string) => void;
   hasActiveBattle: () => boolean;
   markRewardsProcessed: (bossId: string) => void;
+  refetchBosses: () => Promise<void>;
 }
-
 
 const BossContext = createContext<BossContextType | undefined>(undefined);
 
 function generateDayActions(boss: Boss, duration: number): BattleDay[] {
-  // Use custom daily tasks if available
   if (boss.dailyTasks && boss.dailyTasks.length >= duration) {
     return boss.dailyTasks.slice(0, duration).map(task => ({
       day: task.day,
@@ -85,63 +83,86 @@ const defaultBattle = (bossId: string): BossBattle => ({
 
 export function BossProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
-  const [bosses, setBosses] = useState<Boss[]>(mockBosses);
+  const [bosses, setBosses] = useState<Boss[]>([]);
   const [battles, setBattles] = useState<Record<string, BossBattle>>({});
 
-  useEffect(() => {
-    if (!user) return;
-    
-    const fetchData = async () => {
-      const [bossesRes, battlesRes] = await Promise.all([
-        supabase.from('custom_bosses').select('*').eq('user_id', user.id),
-        supabase.from('boss_battles').select('*').eq('user_id', user.id)
-      ]);
-      
-      if (bossesRes.data) {
-        const customBosses: Boss[] = bossesRes.data.map(d => ({
+  const fetchData = useCallback(async () => {
+    try {
+      // 1. Fetch system bosses AND user custom bosses from Supabase
+      const { data: bossesData, error: bossesErr } = await supabase
+        .from('custom_bosses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!bossesErr && bossesData) {
+        const fetchedBosses: Boss[] = bossesData.map((d: any) => ({
           id: d.id,
           name: d.name,
-          class: d.class,
+          class: d.class || d.vice || 'Desafio',
           portrait: d.portrait,
           description: d.description,
           origin: d.origin,
-          vice: d.vice,
+          vice: d.vice || d.class || 'Desafio',
           difficulty: d.difficulty as any,
-          xpReward: d.xp_reward,
-          durationDays: d.duration_days,
-          rules: d.rules,
-          abilities: d.abilities,
-          weaknesses: d.weaknesses,
-          dailyTasks: d.daily_tasks || []
+          attributeArea: (d.attribute_area as AttributeArea) || 'Mental',
+          isSystem: Boolean(d.is_system),
+          defeated: false,
+          xpReward: Number(d.xp_reward) || 300,
+          penaltyXp: Number(d.penalty_xp) || 100,
+          maxFails: Number(d.max_fails) || 3,
+          durationDays: Number(d.duration_days) || 30,
+          rules: d.rules || {
+            penaltyAreas: [d.attribute_area || 'Mental'],
+            penaltyPoints: Number(d.penalty_xp) || 100,
+            rewardXp: Number(d.xp_reward) || 300,
+            rewardAreas: [d.attribute_area || 'Mental'],
+            maxFails: Number(d.max_fails) || 3,
+          },
+          abilities: d.abilities || [],
+          weaknesses: d.weaknesses || [],
+          dailyTasks: d.daily_tasks || [],
         }));
-        setBosses([...customBosses, ...mockBosses]);
+        setBosses(fetchedBosses);
       }
-      
-      if (battlesRes.data) {
-        const hydratedBattles: Record<string, BossBattle> = {};
-        const sorted = battlesRes.data.sort((a, b) => 
-          new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
-        );
-        for (const b of sorted) {
-          const days = (b.days_history as BattleDay[]) || [];
-          hydratedBattles[b.boss_id] = {
-            bossId: b.boss_id,
-            status: b.status as BattleStatus,
-            startedAt: b.started_at,
-            durationDays: b.duration_days,
-            days,
-            wins: b.status === 'won' ? 1 : 0,
-            losses: b.status === 'lost' ? 1 : 0,
-            currentDay: days.filter(d => d.status !== 'pending').length + 1 || 1,
-            rewardsProcessed: b.status === 'won' || b.status === 'lost'
-          };
+
+      // 2. Fetch user boss battles if logged in
+      if (user) {
+        const { data: battlesData } = await supabase
+          .from('boss_battles')
+          .select('*')
+          .eq('user_id', user.id);
+
+        if (battlesData) {
+          const hydratedBattles: Record<string, BossBattle> = {};
+          const sorted = battlesData.sort((a, b) =>
+            new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
+          );
+
+          for (const b of sorted) {
+            const days = (b.days_history as BattleDay[]) || [];
+            hydratedBattles[b.boss_id] = {
+              bossId: b.boss_id,
+              status: b.status as BattleStatus,
+              startedAt: b.started_at,
+              durationDays: b.duration_days,
+              days,
+              wins: b.status === 'won' ? 1 : 0,
+              losses: b.status === 'lost' ? 1 : 0,
+              currentDay: days.filter(d => d.status !== 'pending').length + 1 || 1,
+              rewardsProcessed: b.status === 'won' || b.status === 'lost',
+            };
+          }
+          setBattles(hydratedBattles);
         }
-        setBattles(hydratedBattles);
       }
-    };
-    
-    fetchData();
+    } catch (err) {
+      console.error('Erro ao carregar chefões do banco:', err);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const getBattle = useCallback((bossId: string): BossBattle => {
     return battles[bossId] || defaultBattle(bossId);
@@ -149,8 +170,9 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
 
   const addBoss = useCallback(async (boss: Boss) => {
     setBosses(prev => (prev.some(b => b.id === boss.id) ? prev : [boss, ...prev]));
+
     if (user) {
-      await supabase.from('custom_bosses').insert({
+      const { error } = await supabase.from('custom_bosses').insert({
         id: boss.id,
         user_id: user.id,
         name: boss.name,
@@ -160,33 +182,37 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         origin: boss.origin,
         vice: boss.vice,
         difficulty: boss.difficulty,
+        attribute_area: boss.attributeArea,
+        is_system: false,
         xp_reward: boss.xpReward,
-        duration_days: boss.durationDays,
+        penalty_xp: boss.penaltyXp || 100,
+        max_fails: boss.maxFails || 3,
+        duration_days: boss.durationDays || 30,
         rules: boss.rules,
         abilities: boss.abilities,
         weaknesses: boss.weaknesses,
-        daily_tasks: boss.dailyTasks
-      }).then(({ error }) => {
-        if (error) {
-          console.error("Erro CRÍTICO ao inserir custom_bosses:", error);
-          toast.error(`Falha no Banco de Dados: ${error.message}`);
-        }
+        daily_tasks: boss.dailyTasks,
       });
+
+      if (error) {
+        console.error('Erro ao inserir chefão no banco:', error);
+        toast.error(`Falha no banco: ${error.message}`);
+      } else {
+        toast.success('⚔️ Chefão registrado no banco de dados!');
+      }
     }
   }, [user]);
 
   const hasActiveBattle = useCallback(() => {
-    return Object.values(battles).some(b => b.status === 'active');
-  }, [battles]);
+    return Object.values(battles).some(b => b.status === 'active' && bosses.some(boss => boss.id === b.bossId));
+  }, [battles, bosses]);
 
   const startBattle = useCallback((bossId: string, durationDays?: number) => {
     const boss = bosses.find(b => b.id === bossId);
     if (!boss) return;
 
-
-    // Enforce: only one active battle at a time
     const hasActive = Object.values(battles).some(
-      b => b.status === 'active' && b.bossId !== bossId
+      b => b.status === 'active' && b.bossId !== bossId && bosses.some(boss => boss.id === b.bossId)
     );
     if (hasActive) {
       toast.error('Você já possui um chefão em batalha. Finalize ou abandone a batalha atual antes de iniciar outra.');
@@ -203,7 +229,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       currentDay: 1,
       rewardsProcessed: false,
       wins: 0,
-      losses: 0
+      losses: 0,
     };
 
     setBattles(prev => ({ ...prev, [bossId]: newBattle }));
@@ -215,15 +241,14 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         status: 'active',
         started_at: newBattle.startedAt,
         duration_days: duration,
-        days_history: newBattle.days
+        days_history: newBattle.days,
       }).then(({ error }) => {
-        if (error) console.error("Erro ao inserir boss_battles:", error);
+        if (error) console.error('Erro ao inserir boss_battles:', error);
       });
     }
 
     toast.success('⚔️ Batalha iniciada! Boa sorte, guerreiro!');
   }, [battles, bosses, user]);
-
 
   const recordDayAction = useCallback((bossId: string, day: number, success: boolean) => {
     setBattles(prev => {
@@ -239,14 +264,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const successCount = newDays.filter(d => d.status === 'success').length;
       const failCount = newDays.filter(d => d.status === 'fail').length;
       const boss = bosses.find(b => b.id === bossId);
-      const DIFFICULTY_MAX_FAILS: Record<string, number> = {
-        legendary: 1, epic: 3, rare: 5, uncommon: 7, common: 10,
-      };
-      const maxFails =
-        boss?.rules?.maxFails ??
-        (boss ? DIFFICULTY_MAX_FAILS[boss.difficulty] : undefined) ??
-        Math.ceil(battle.durationDays * 0.3);
-
+      const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
 
       let newStatus: BattleStatus = 'active';
       let wins = battle.wins;
@@ -257,12 +275,10 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const remainingDays = battle.durationDays - completedCount;
 
       if (failCount > maxFails) {
-        // Excedeu o limite de falhas — derrota imediata
         newStatus = 'lost';
         losses += 1;
         toast.error('💀 Você foi derrotado... Tente novamente!');
       } else if (remainingDays === 0) {
-        // Todos os dias registrados e falhas dentro do limite — vitória
         newStatus = 'won';
         wins += 1;
         toast.success('🏆 Boss derrotado! Você venceu a batalha!');
@@ -273,12 +289,12 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       }
 
       const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
-      
+
       if (user) {
         supabase.from('boss_battles')
           .update({
             days_history: newDays,
-            status: newStatus
+            status: newStatus,
           })
           .eq('user_id', user.id)
           .eq('boss_id', bossId)
@@ -291,7 +307,6 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       };
     });
   }, [bosses, user]);
-
 
   const getProgress = useCallback((bossId: string): number => {
     const battle = battles[bossId];
@@ -313,7 +328,6 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   const getTodayBossAction = useCallback((bossId: string): BattleDay | null => {
     const battle = battles[bossId];
     if (!battle || battle.status !== 'active') return null;
-    // Se já registrou uma ação hoje (sucesso ou falha), esconde a próxima até amanhã
     const today = new Date().toDateString();
     const actedToday = battle.days.some(
       d => d.completedAt && new Date(d.completedAt).toDateString() === today
@@ -327,9 +341,9 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const battle = prev[bossId];
       if (!battle || battle.status !== 'active') return prev;
       toast.error('💀 Batalha abandonada. Registrada como derrota.');
-      
+
       const nextBattle = { ...battle, status: 'lost' as BattleStatus, losses: battle.losses + 1 };
-      
+
       if (user) {
         supabase.from('boss_battles')
           .update({ status: 'lost' })
@@ -337,7 +351,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
           .eq('boss_id', bossId)
           .eq('status', 'active').then();
       }
-      
+
       return { ...prev, [bossId]: nextBattle };
     });
   }, [user]);
@@ -351,23 +365,26 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const deleteBoss = useCallback((bossId: string) => {
-    if (!bossId.startsWith('boss-custom-')) {
-      toast.error('Somente chefões criados pelo usuário podem ser excluídos.');
+    const boss = bosses.find(b => b.id === bossId);
+    if (boss?.isSystem) {
+      toast.error('Chefões padrão do sistema não podem ser excluídos.');
       return;
     }
+
     setBosses(prev => prev.filter(b => b.id !== bossId));
     setBattles(prev => {
       const next = { ...prev };
       delete next[bossId];
       return next;
     });
-    
+
     if (user) {
+      supabase.from('boss_battles').delete().eq('boss_id', bossId).eq('user_id', user.id).then();
       supabase.from('custom_bosses').delete().eq('id', bossId).eq('user_id', user.id).then();
     }
-    
+
     toast.success('Chefão excluído.');
-  }, [user]);
+  }, [bosses, user]);
 
   const value = useMemo(() => ({
     bosses,
@@ -383,8 +400,8 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     deleteBoss,
     hasActiveBattle,
     markRewardsProcessed,
-  }), [bosses, battles, getBattle, startBattle, recordDayAction, abandonBattle, getProgress, getActiveBattles, getTodayBossAction, addBoss, deleteBoss, hasActiveBattle, markRewardsProcessed]);
-
+    refetchBosses: fetchData,
+  }), [bosses, battles, getBattle, startBattle, recordDayAction, abandonBattle, getProgress, getActiveBattles, getTodayBossAction, addBoss, deleteBoss, hasActiveBattle, markRewardsProcessed, fetchData]);
 
   return (
     <BossContext.Provider value={value}>

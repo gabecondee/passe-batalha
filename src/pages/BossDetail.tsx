@@ -139,7 +139,12 @@ export default function BossDetail() {
               "border-primary/50 shadow-[0_0_40px_hsl(var(--primary)/0.25)]"
             )}>
               {boss.portrait ? (
-                <img src={boss.portrait} alt={displayName} className="w-full h-full object-cover" />
+                <img 
+                  src={boss.portrait} 
+                  alt={displayName} 
+                  className="w-full h-full object-cover"
+                  onError={(e) => { e.currentTarget.src = '/images/bosses/boss-morthzul.jpg' }}
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">
                   <Skull className="w-24 h-24 text-primary" />
@@ -469,7 +474,12 @@ export default function BossDetail() {
                   </section>
                 )}
 
-                {boss.rules && (() => {
+                {(() => {
+                  const penaltyAreas = boss.rules?.penaltyAreas || [boss.attributeArea || 'Mental'];
+                  const rewardAreas = boss.rules?.rewardAreas || [boss.attributeArea || 'Mental'];
+                  const penaltyPoints = boss.rules?.penaltyPoints ?? boss.penaltyXp ?? 100;
+                  const rewardXp = boss.rules?.rewardXp ?? boss.xpReward ?? 300;
+
                   const splitAreas = (total: number, areas: string[]) => {
                     if (areas.length === 2) {
                       const first = Math.round(total * 0.3);
@@ -488,8 +498,8 @@ export default function BossDetail() {
                     <section className="space-y-2">
                       <h3 className="text-xs uppercase tracking-widest text-amber-400 font-semibold">Regras da Batalha</h3>
                       <div className="text-xs text-muted-foreground space-y-1.5 p-3 rounded-lg bg-amber-500/5 border border-amber-500/20">
-                        <p>💀 <span className="text-foreground">Penalidade:</span> -{boss.rules.penaltyPoints} XP | {fmtDist(boss.rules.penaltyPoints, boss.rules.penaltyAreas, '-')}</p>
-                        <p>🏆 <span className="text-foreground">Recompensa:</span> +{boss.rules.rewardXp} XP | {fmtDist(boss.rules.rewardXp, boss.rules.rewardAreas, '+')}</p>
+                        <p>💀 <span className="text-foreground">Penalidade:</span> -{penaltyPoints} XP | {fmtDist(penaltyPoints, penaltyAreas, '-')}</p>
+                        <p>🏆 <span className="text-foreground">Recompensa:</span> +{rewardXp} XP | {fmtDist(rewardXp, rewardAreas, '+')}</p>
                         <p>📜 <span className="text-foreground">Pós-batalha:</span> Compartilhar o resultado na aba "Arena de Chefões" da comunidade (mesmo em caso de derrota).</p>
                       </div>
                     </section>
