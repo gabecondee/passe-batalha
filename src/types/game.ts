@@ -12,6 +12,7 @@ export interface User {
   avatar: string;
   level: number;
   totalXP: number;
+  earnedTotalXP: number;
   xpToNextLevel: number;
   currentXP: number;
   energy: number;

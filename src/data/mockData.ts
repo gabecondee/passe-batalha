@@ -6,6 +6,7 @@ export const currentUser: User = {
   avatar: '/placeholder.svg',
   level: 12,
   totalXP: 15420,
+  earnedTotalXP: 15420,
   xpToNextLevel: 2000,
   currentXP: 1420,
   energy: 85,

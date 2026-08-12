@@ -22,9 +22,23 @@ export default function Ranking() {
 
   useEffect(() => {
     async function fetchRanking() {
-      const { data } = await supabase.from('global_ranking').select('*');
+      // Buscar profiles com seus respectivos XP's
+      const { data } = await supabase.from('profiles').select('id, name, avatar, created_at, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial');
+      
+      // Buscar streaks separadamente
+      const { data: streaksData } = await supabase.from('streaks').select('user_id, streak_days');
+      const streakMap = new Map((streaksData || []).map(s => [s.user_id, s.streak_days]));
+
       if (data) {
-        setRawRanking(data);
+        const ranking = data.map((p: any) => ({
+          id: p.id,
+          name: p.name,
+          avatar: p.avatar,
+          created_at: p.created_at,
+          total_xp: (p.xp_physical || 0) + (p.xp_mental || 0) + (p.xp_spiritual || 0) + (p.xp_professional || 0) + (p.xp_financial || 0),
+          streak: streakMap.get(p.id) || 0
+        }));
+        setRawRanking(ranking);
       }
     }
     fetchRanking();
@@ -40,7 +54,7 @@ export default function Ranking() {
             name: user.name,
             avatar: user.avatar,
             created_at: new Date().toISOString(),
-            total_xp: user.totalXP,
+            total_xp: user.earnedTotalXP || 0,
             streak: 0,
           },
         ];
@@ -133,7 +147,7 @@ export default function Ranking() {
           <SummaryCard
             delay={0.1}
             icon={<TrendingUp className="h-6 w-6 md:h-7 md:w-7" />}
-            value={user.totalXP.toLocaleString('pt-BR')}
+            value={(user.earnedTotalXP || 0).toLocaleString('pt-BR')}
             label="Seu XP Total"
             accent="blue"
           />

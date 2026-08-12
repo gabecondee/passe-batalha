@@ -354,6 +354,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       name: userName,
       level,
       totalXP: displayedTotalXP,
+      earnedTotalXP,
       currentXP: info.currentXP,
       xpToNextLevel: info.xpToNextLevel,
       title,
