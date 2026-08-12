@@ -223,6 +223,9 @@ export function TrainingPlanDialog({ open, onOpenChange, initial, onSave }: Trai
                   <PopoverContent className="w-auto p-0 z-[100]" align="end">
                     <Calendar
                       mode="single"
+                      captionLayout="dropdown-buttons"
+                      fromYear={1920}
+                      toYear={new Date().getFullYear()}
                       selected={birthDate ? parseISO(birthDate) : undefined}
                       onSelect={(d) => d && setBirthDate(format(d, 'yyyy-MM-dd'))}
                       initialFocus

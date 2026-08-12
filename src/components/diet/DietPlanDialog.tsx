@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { ChevronUp, ChevronDown, Sparkles, CalendarIcon } from 'lucide-react';
+import { ChevronUp, ChevronDown, Save, CalendarIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -252,6 +252,9 @@ export function DietPlanDialog({ open, onOpenChange, onGenerate, initial }: Prop
                     <PopoverContent className="w-auto p-0 z-[100]" align="start">
                       <Calendar
                         mode="single"
+                        captionLayout="dropdown-buttons"
+                        fromYear={1920}
+                        toYear={new Date().getFullYear()}
                         selected={birthDate ? parseISO(birthDate) : undefined}
                         onSelect={(date) => {
                           if (date) {
@@ -337,8 +340,8 @@ export function DietPlanDialog({ open, onOpenChange, onGenerate, initial }: Prop
               disabled={saving}
               className="w-full rounded-xl bg-gradient-to-r from-primary to-accent py-6 font-display text-base uppercase tracking-widest text-primary-foreground shadow-[0_0_24px_hsl(var(--primary)/0.5)]"
             >
-              <Sparkles className="mr-2 h-5 w-5" />
-              {saving ? 'Gerando...' : 'Gerar Plano'}
+              <Save className="mr-2 h-5 w-5" />
+              {saving ? 'Salvando...' : 'Salvar Plano'}
             </Button>
           </motion.div>
         </div>

@@ -12,22 +12,22 @@ Deno.serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY ausente');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY ausente');
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'gpt-4o-mini',
         messages: [
           {
             role: 'system',
             content:
-              'Você é um nutricionista. Estime os macronutrientes de um alimento descrito em português brasileiro. Sempre retorne valores numéricos realistas, mesmo que aproximados. Considere a quantidade descrita pelo usuário (ex: "2 ovos cozidos", "100g de arroz branco", "1 fatia de pão integral").',
+              'Você é um nutricionista experiente. Estime os macronutrientes de um alimento descrito em português brasileiro. Sempre retorne valores numéricos realistas, mesmo que aproximados. Considere a quantidade descrita pelo usuário (ex: "2 ovos cozidos", "100g de arroz branco", "1 fatia de pão integral"). Retorne sempre a estrutura de dados correta.',
           },
           { role: 'user', content: description },
         ],
@@ -57,22 +57,10 @@ Deno.serve(async (req) => {
       }),
     });
 
-    if (response.status === 429) {
-      return new Response(JSON.stringify({ error: 'Muitas requisições, tente novamente em instantes.' }), {
-        status: 429,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-    if (response.status === 402) {
-      return new Response(JSON.stringify({ error: 'Créditos de IA esgotados.' }), {
-        status: 402,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
     if (!response.ok) {
       const t = await response.text();
-      console.error('AI error', response.status, t);
-      return new Response(JSON.stringify({ error: 'Erro no gateway de IA' }), {
+      console.error('OpenAI error', response.status, t);
+      return new Response(JSON.stringify({ error: 'Erro no gateway de IA da OpenAI' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
@@ -81,11 +69,12 @@ Deno.serve(async (req) => {
     const data = await response.json();
     const args = data.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
     if (!args) {
-      return new Response(JSON.stringify({ error: 'Sem resposta estruturada' }), {
+      return new Response(JSON.stringify({ error: 'Sem resposta estruturada da OpenAI' }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    
     const parsed = JSON.parse(args);
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

@@ -200,6 +200,9 @@ export function AddEventDialog({
                 <PopoverContent className="w-auto p-0 z-[100]" align="start">
                   <Calendar
                     mode="single"
+                    captionLayout="dropdown-buttons"
+                    fromYear={new Date().getFullYear() - 5}
+                    toYear={new Date().getFullYear() + 10}
                     selected={date ? parseISO(date) : undefined}
                     onSelect={(d) => d && setDate(format(d, 'yyyy-MM-dd'))}
                     initialFocus

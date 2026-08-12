@@ -273,6 +273,9 @@ export function ResourceBag() {
           <PopoverContent className="w-auto p-0" align="end">
             <Calendar
               mode="range"
+              captionLayout="dropdown-buttons"
+              fromYear={2020}
+              toYear={new Date().getFullYear() + 1}
               selected={range}
               onSelect={setRange}
               numberOfMonths={1}

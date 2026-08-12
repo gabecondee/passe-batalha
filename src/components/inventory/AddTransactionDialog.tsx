@@ -206,8 +206,11 @@ export function AddTransactionDialog({
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
+                  captionLayout="dropdown-buttons"
+                  fromYear={2020}
+                  toYear={new Date().getFullYear() + 1}
                   selected={date}
-                  onSelect={(d) => { setDate(d); setDateOpen(false); }}
+                  onSelect={(d) => { if(d) setDate(d); setDateOpen(false); }}
                   initialFocus
                 />
               </PopoverContent>

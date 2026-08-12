@@ -344,6 +344,9 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
+                  captionLayout="dropdown-buttons"
+                  fromYear={new Date().getFullYear() - 5}
+                  toYear={new Date().getFullYear() + 10}
                   selected={form.deadline}
                   onSelect={(date) => setForm(p => ({ ...p, deadline: date as Date | undefined }))}
                   disabled={(d) => d < new Date()}

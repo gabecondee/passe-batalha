@@ -115,23 +115,20 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     setGenerating(true);
     setGeneratedAvatar(null);
     try {
-      // API call to Edge Function commented out to bypass AI temporarily
-      /*
       const { data, error } = await supabase.functions.invoke('generate-avatar', {
         body: { photoBase64, className: chosenClass },
       });
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Function Error:", error);
+        throw error;
+      }
+      
       if (data?.avatarUrl) {
         setGeneratedAvatar(data.avatarUrl);
       } else {
-        throw new Error(data?.error || 'Falha ao gerar avatar');
+        throw new Error(data?.error || 'Falha inesperada ao gerar avatar');
       }
-      */
-      
-      // Temporary AI Bypass using DiceBear
-      await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate loading
-      const randomUrl = `https://api.dicebear.com/9.x/adventurer/svg?seed=${Date.now()}`;
-      setGeneratedAvatar(randomUrl);
 
     } catch (e: any) {
       toast.error('Erro ao gerar avatar: ' + (e?.message || e));
@@ -535,12 +532,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                 </span>
                 <Input
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => setName(e.target.value.replace(/[^a-zA-ZÀ-ÿ\s]/g, ''))}
                   placeholder="Seu nome"
                   maxLength={24}
                   autoFocus
                   onKeyDown={(e) => { if (e.key === 'Enter' && name.trim().length >= 2) setScreen('class'); }}
-                  className="pl-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base"
+                  className="pl-12 h-16 py-3 text-lg rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70"
                 />
               </div>
               <Button
@@ -549,7 +546,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   setScreen('class');
                 }}
                 disabled={name.trim().length < 2}
-                className="w-full h-14 rounded-xl text-base tracking-[0.2em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-300/60 disabled:opacity-50 disabled:shadow-none"
+                className="w-full h-16 rounded-xl text-base tracking-[0.2em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_30px_rgba(245,158,11,0.5)] border border-amber-300/60 disabled:opacity-50 disabled:shadow-none"
                 style={{ fontFamily: 'Inter, sans-serif' }}
               >
                 CONTINUAR <ChevronRight className="w-5 h-5 ml-2" />
