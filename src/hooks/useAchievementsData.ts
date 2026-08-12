@@ -113,6 +113,14 @@ export function useAchievementsData() {
       });
     }
 
+    if ((e.type as string) === 'diet:plan-created') {
+      setDbStats(prev => {
+        const next = { ...prev, diet_plans_created: prev.diet_plans_created + 1 };
+        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        return next;
+      });
+    }
+
     // Trigger re-evaluation
     if (
       e.type === 'journal:entry-added' ||

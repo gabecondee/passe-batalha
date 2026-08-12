@@ -19,6 +19,7 @@ import { getMealIcon } from '@/lib/mealIcon';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGame } from '@/contexts/GameContext';
+import { emit } from '@/lib/eventBus';
 
 const MACRO_COLORS = {
   carbs: 'hsl(210 90% 60%)', // blue
@@ -127,6 +128,7 @@ export default function Diet() {
         carbs_target: computed.carbs.g,
         fat_target: computed.fat.g
       });
+      emit({ type: 'diet:plan-created' });
     }
   };
 
