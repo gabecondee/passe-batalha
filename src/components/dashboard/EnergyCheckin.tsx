@@ -20,7 +20,7 @@ const ENERGY_DATA: Record<number, { description: string; activities: string[] }>
       'Escreva o que está sentindo no diário.',
       'Caminhada ao ar livre.',
       'Evite contato social.',
-      'Visite seus artefatos lendários.',
+      'Visite suas conquistas.',
     ],
   },
   5: {
