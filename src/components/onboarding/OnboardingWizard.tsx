@@ -22,12 +22,11 @@ import hakimSummaryOwlAsset from '@/assets/hakim-summary-owl.png.asset.json';
 import { SkillsRadar } from '@/components/dashboard/SkillsRadar';
 import { Star } from 'lucide-react';
 import passeBatalhaLogo from '@/assets/passe-batalha-logo.png';
+import curandeiroImg from '@/assets/class-curandeiro.png';
 import warriorImg from '@/assets/class-warrior-v2.jpeg';
 import mageImg from '@/assets/class-mage-v2.jpeg';
-import guardianImg from '@/assets/class-guardian-v2.jpeg';
 import rogueImg from '@/assets/class-rogue-v2.jpeg';
 import paladinImg from '@/assets/class-paladin-v2.jpeg';
-import monkImg from '@/assets/class-monk-v2.jpeg';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useEffect } from 'react';
 
@@ -38,20 +37,19 @@ const SERIF = "'Cormorant Garamond', 'Cinzel', serif";
 
 
 interface OnboardingWizardProps {
-  onComplete: (data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => void;
+  onComplete: (data: { name: string; avatar: string | null; initialSkills?: Record<string, number>; class?: string }) => void;
 }
 
 type Screen = 'start' | 'meet' | 'name' | 'class' | 'character' | 'skills' | 'summary';
 
-type ClassKey = 'warrior' | 'mage' | 'guardian' | 'rogue' | 'paladin' | 'monk';
+type ClassKey = 'warrior' | 'mage' | 'healer' | 'rogue' | 'paladin';
 
 const CLASSES: { key: ClassKey; name: string; traits: string[]; img: string; glow: string }[] = [
-  { key: 'guardian', name: 'Guardião', traits: ['Lealdade', 'Empatia', 'Responsabilidade'], img: guardianImg, glow: 'shadow-[0_0_45px_rgba(34,197,94,0.55)]' },
+  { key: 'healer', name: 'Curandeiro', traits: ['Lealdade', 'Empatia', 'Responsabilidade'], img: curandeiroImg, glow: 'shadow-[0_0_45px_rgba(34,197,94,0.55)]' },
   { key: 'mage', name: 'Mago', traits: ['Criatividade', 'Conhecimento', 'Visão'], img: mageImg, glow: 'shadow-[0_0_45px_rgba(139,92,246,0.55)]' },
   { key: 'warrior', name: 'Guerreiro', traits: ['Disciplina', 'Coragem', 'Esforço'], img: warriorImg, glow: 'shadow-[0_0_45px_rgba(239,68,68,0.6)]' },
   { key: 'rogue', name: 'Ladino', traits: ['Astúcia', 'Liberdade', 'Adaptabilidade'], img: rogueImg, glow: 'shadow-[0_0_45px_rgba(168,85,247,0.55)]' },
   { key: 'paladin', name: 'Paladino', traits: ['Honra', 'Fé', 'Propósito'], img: paladinImg, glow: 'shadow-[0_0_45px_rgba(234,179,8,0.65)]' },
-  { key: 'monk', name: 'Monge', traits: ['Calma', 'Autocontrole', 'Sabedoria'], img: monkImg, glow: 'shadow-[0_0_45px_rgba(147,197,253,0.6)]' },
 ];
 
 const SKILL_CARDS = [
@@ -169,7 +167,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
       }
     }
 
-    onComplete({ name: name.trim(), avatar: generatedAvatar, initialSkills: skillValues });
+    onComplete({ name: name.trim(), avatar: generatedAvatar, initialSkills: skillValues, class: chosenClass as string });
   };
 
   const handleAuth = async (e: React.FormEvent) => {
@@ -446,7 +444,12 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                             if (deferredPrompt) {
                               handleInstallClick();
                             } else {
-                              toast('App já instalado ou navegador não suporta PWA no momento.');
+                              const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+                              if (isIos) {
+                                toast('Para instalar no iPhone: toque no ícone de Compartilhar ↗ no Safari e selecione "Adicionar à Tela de Início".', { duration: 6000 });
+                              } else {
+                                toast('App já instalado ou navegador não suporta PWA no momento.');
+                              }
                             }
                           }}
                           className="flex items-center gap-2 text-slate-500 hover:text-amber-400 text-xs font-semibold tracking-wider transition-colors uppercase"
@@ -1172,8 +1175,8 @@ function HakimMascot({ small = false }: { small?: boolean }) {
 }
 
 const CLASS_LABELS: Record<ClassKey, string> = {
-  warrior: 'Guerreiro', mage: 'Mago', guardian: 'Guardião',
-  rogue: 'Ladino', paladin: 'Paladino', monk: 'Monge',
+  warrior: 'Guerreiro', mage: 'Mago', healer: 'Curandeiro',
+  rogue: 'Ladino', paladin: 'Paladino',
 };
 
 const SKILL_LABELS: Record<string, string> = {
@@ -1523,9 +1526,9 @@ function ClassCarousel({
                       ? 'border-amber-400/80 ' + c.glow
                       : 'border-amber-500/30'
                   }`}
-                  style={{ aspectRatio: '3/4.6' }}
+                  style={{ aspectRatio: '3/5' }}
                 >
-                  <div className="relative h-[62%] w-full overflow-hidden">
+                  <div className="relative h-[55%] w-full overflow-hidden">
                     <img
                       src={c.img}
                       alt={c.name}

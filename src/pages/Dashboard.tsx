@@ -24,8 +24,8 @@ import { cn } from '@/lib/utils';
 
 
 const CLASS_LABELS: Record<string, string> = {
-  warrior: 'GUERREIRO', mage: 'MAGO', guardian: 'GUARDIÃO',
-  rogue: 'LADINO', paladin: 'PALADINO', monk: 'MONGE',
+  warrior: 'GUERREIRO', mage: 'MAGO', healer: 'CURANDEIRO',
+  rogue: 'LADINO', paladin: 'PALADINO',
 };
 
 const ENERGY_MESSAGES: { max: number; description: string; activities: string[] }[] = [

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -92,10 +92,20 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
   const { addBoss, startBattle, hasActiveBattle } = useBoss();
   const [step, setStep] = useState(0); // 0 = problem, 1 = area selection, 2..5 = quiz questions
   const [problem, setProblem] = useState('');
-  const [selectedArea, setSelectedArea] = useState<AttributeArea>('Mental');
+  const [selectedArea, setSelectedArea] = useState<AttributeArea>('' as AttributeArea);
   const [scores, setScores] = useState<Record<string, 1 | 2 | 3 | 4>>({});
   const [loading, setLoading] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const isCancelledRef = useRef(false);
+
+  const cancelGeneration = () => {
+    isCancelledRef.current = true;
+    setLoading(false);
+    setStep(0);
+    setProblem('');
+    setScores({});
+  };
+
 
   useEffect(() => {
     if (!open) {
@@ -150,6 +160,7 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
   };
 
   const generateBoss = async (finalScores: Record<string, 1 | 2 | 3 | 4>) => {
+    isCancelledRef.current = false;
     setLoading(true);
     try {
       const timeScore = finalScores.time || 2;
@@ -204,8 +215,8 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
         const prompt = `${problem} ${selectedArea}`;
         
         aiResult = {
-          name: `${prompt.split(' ')[0].toUpperCase()}'ZUL - O Devorador de ${selectedArea}`,
-          shortName: `${prompt.split(' ')[0].toUpperCase()}'ZUL`,
+          name: `${prompt.split(' ')[0].toUpperCase()}'ZUL`,
+          subtitle: `O Devorador de ${selectedArea}`,
           class: problem,
           description: `Um boss gerado como fallback local porque o servidor falhou.`,
           origin: `Nascido do erro 500.`,
@@ -239,11 +250,16 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
       const bossId = `boss-custom-${Date.now()}`;
 
       // Upload imagem para Supabase Storage permanente (se necessário)
+      if (isCancelledRef.current) return;
       const permanentPortraitUrl = await uploadBossPortraitToSupabase(portraitUrl, bossId);
+      if (isCancelledRef.current) return;
 
       const capName = problem.trim().toUpperCase();
+      const rawAiName = aiResult?.name || `${capName} - A Sombra de ${selectedArea}`;
+      const defaultName = aiResult?.subtitle && !rawAiName.includes('-') 
+        ? `${rawAiName} - ${aiResult.subtitle}` 
+        : rawAiName;
 
-      const defaultName = aiResult?.name || `${capName} - A Sombra de ${selectedArea}`;
       const defaultDesc = aiResult?.description || `A manifestação sombria de sua luta contra ${problem.trim()}. Ele se alimenta da sua hesitação e consome sua energia na área ${selectedArea}, aguardando o momento em que sua força de vontade fraqueja.`;
       const defaultOrigin = aiResult?.origin || `Nascido dos padrões repetitivos e gatilhos automáticos associados a ${problem.trim()}.`;
 
@@ -276,6 +292,7 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
       const newBoss: Boss = {
         id: bossId,
         name: defaultName,
+        subtitle: aiResult?.subtitle || '',
         class: problem.trim(),
         vice: problem.trim(),
         difficulty,
@@ -301,7 +318,9 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
         dailyTasks: campaignTasks,
       };
 
+      if (isCancelledRef.current) return;
       await addBoss(newBoss);
+      if (isCancelledRef.current) return;
 
       setTimeout(() => {
         startBattle(bossId, 30);
@@ -331,6 +350,13 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
               </p>
               <p className="text-xs text-muted-foreground">Materializando os atributos do inimigo e forjando a batalha...</p>
             </div>
+            <Button
+              variant="outline"
+              onClick={cancelGeneration}
+              className="mt-6 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              Cancelar Geração
+            </Button>
           </div>
         ) : (
           <>
@@ -390,10 +416,10 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
                 <div className="space-y-4 animate-fade-in">
                   <div>
                     <p className="font-display text-base text-foreground/95 mb-1">
-                      Qual Área de Atributo este Boss irá afetar?
+                      Selecione a área de atribuição do BOSS:
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Vencer este boss creditará XP nesta área; perder irá descontar XP desta área (sem cair abaixo do XP do Onboarding).
+                      Vencer este boss creditará XP nesta área; perder irá descontar.
                     </p>
                   </div>
                   <div className="space-y-2">

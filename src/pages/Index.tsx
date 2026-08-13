@@ -45,7 +45,7 @@ const Index = () => {
     checkOnboarding();
   }, [user, authLoading]);
 
-  const handleComplete = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => {
+  const handleComplete = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number>; class?: string }) => {
     completeOnboarding(data);
     setHasCompletedOnboarding(true);
   }, [completeOnboarding]);

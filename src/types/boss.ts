@@ -40,6 +40,7 @@ export interface Boss {
   isSystem?: boolean;
   requiredLevel?: number;
   portrait?: string;
+  subtitle?: string;
   description?: string;
   origin?: string;
   abilities?: BossAbility[];

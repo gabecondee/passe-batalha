@@ -198,7 +198,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         console.error('Erro ao inserir chefão no banco:', error);
         toast.error(`Falha no banco: ${error.message}`);
       } else {
-        toast.success('⚔️ Chefão registrado no banco de dados!');
+        toast.success('⚔️ Uma nova ameaça foi registrada no Bestiário!');
       }
     }
   }, [user]);

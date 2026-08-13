@@ -82,8 +82,13 @@ export default function BossDetail() {
   // Split name: "MORTH'ZUL - O Devorador de Vitalidade" (aceita "-", "–" ou ":", com ou sem espaços)
   const splitMatch = boss.name.match(/^(.*?)\s*[-–:]\s*(.+)$/);
   const displayName = (splitMatch ? splitMatch[1] : boss.name).trim();
-  const subtitle = (splitMatch ? splitMatch[2] : '').trim();
   const isCustom = boss.id.startsWith('boss-custom-');
+  let subtitle = boss.subtitle || (splitMatch ? splitMatch[2] : '').trim();
+  
+  // Fallback se ainda não tiver subtítulo: pegar a primeira frase da descrição
+  if (!subtitle && isCustom && boss.description) {
+    subtitle = boss.description.split(/(?<=[.!?])\s+/)[0].trim();
+  }
 
   // Vida do Boss = 100 - progress (progress = successes / duration)
   const bossHealth = Math.max(0, 100 - progress);

@@ -10,10 +10,9 @@ const corsHeaders = {
 const CLASS_PROMPTS: Record<string, string> = {
     warrior: "heavy battle armor, glowing sword, fierce red/orange fiery aura",
     mage: "mystical robe, glowing staff with runes, blue and purple magical aura",
-    guardian: "protective heavy plate armor, large shield, calm green aura",
+    healer: "light divine robes, glowing healing hands, gentle green and white restorative aura",
     rogue: "dark hooded cloak, twin daggers, shadowy dark-purple aura",
     paladin: "shining holy armor, sacred sword, radiant golden divine aura",
-    monk: "light oriental robes, meditative posture, white-blue spiritual energy",
 };
 
 // Helper: fetch with timeout, so a slow provider never hangs the whole function

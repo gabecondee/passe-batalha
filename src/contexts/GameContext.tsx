@@ -227,7 +227,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toast.success('🖼️ Avatar atualizado!');
   }, []);
 
-  const completeOnboarding = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number> }) => {
+  const completeOnboarding = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number>; class?: string }) => {
+    if (data.class) setUserClass(data.class);
     let initialXpObj: Record<AttributeType, number> = { physical: 0, mental: 0, spiritual: 0, professional: 0, financial: 0 };
     // Seed initial XP baseline from onboarding choices (counts toward XP total but not level).
     if (data.initialSkills) {

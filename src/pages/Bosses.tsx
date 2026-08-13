@@ -15,8 +15,8 @@ import { BossQuizDialog } from '@/components/bosses/BossQuizDialog';
 type FilterKind = 'all' | 'active';
 
 const CLASS_LABELS: Record<string, string> = {
-  warrior: 'Guerreiro', mage: 'Mago', guardian: 'Guardião',
-  rogue: 'Ladino', paladin: 'Paladino', monk: 'Monge',
+  warrior: 'Guerreiro', mage: 'Mago', healer: 'Curandeiro',
+  rogue: 'Ladino', paladin: 'Paladino',
 };
 
 const AREA_BADGES: Record<string, { icon: string; color: string }> = {
@@ -170,7 +170,12 @@ export default function Bosses() {
               // Split "Nome - Subtítulo"
               const splitMatch = boss.name.match(/^(.*?)\s*[-–:]\s*(.+)$/);
               const displayName = (splitMatch ? splitMatch[1] : boss.name).trim();
-              const subtitle = (splitMatch ? splitMatch[2] : '').trim();
+              const isCustom = boss.id.startsWith('boss-custom-');
+              let subtitle = boss.subtitle || (splitMatch ? splitMatch[2] : '').trim();
+              
+              if (!subtitle && isCustom && boss.description) {
+                subtitle = boss.description.split(/(?<=[.!?])\s+/)[0].trim();
+              }
 
               const difficultyStars: Record<string, number> = {
                 common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5,
@@ -249,20 +254,15 @@ export default function Bosses() {
                           )}>
                             {isLocked ? '???' : displayName}
                           </h3>
-                          {!isLocked && boss.attributeArea && (
-                            <span className={cn('px-2 py-0.5 rounded-md text-[10px] font-bold border flex items-center gap-1', areaBadge.color)}>
-                              <span>{areaBadge.icon}</span>
-                              <span>{boss.attributeArea}</span>
-                            </span>
-                          )}
                         </div>
                         {!isLocked && subtitle && (
                           <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
                         )}
                         <div className="mt-2 space-y-1 text-xs">
-                          <p className="text-muted-foreground">
-                            <span className="text-foreground/80 font-semibold">Problema:</span>{' '}
-                            <span className="text-amber-400">{isLocked ? '???' : boss.class}</span>
+                          <p className="flex items-center gap-1 text-muted-foreground">
+                            <Skull className="w-3.5 h-3.5 text-foreground/80" />
+                            <span className="text-foreground/80 font-semibold text-xs">Problema:</span>{' '}
+                            <span className="text-amber-400 font-semibold">{isLocked ? '???' : boss.class}</span>
                           </p>
                           {!isLocked && (
                             <p className="flex items-center gap-1 text-muted-foreground">

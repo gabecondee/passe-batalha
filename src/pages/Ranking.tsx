@@ -147,7 +147,7 @@ export default function Ranking() {
           <SummaryCard
             delay={0.1}
             icon={<TrendingUp className="h-6 w-6 md:h-7 md:w-7" />}
-            value={(user.earnedTotalXP || 0).toLocaleString('pt-BR')}
+            value={(user.totalXP || 0).toLocaleString('pt-BR')}
             label="Seu XP Total"
             accent="blue"
           />
