@@ -3,6 +3,7 @@ import { Boss, AttributeArea } from '@/types/boss';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { emit } from '@/lib/eventBus';
 
 export type BattleStatus = 'idle' | 'active' | 'won' | 'lost';
 
@@ -300,6 +301,9 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
           .eq('boss_id', bossId)
           .eq('status', 'active').then();
       }
+
+      // Emite evento para que useAchievementsData reavalie conquistas de boss_hits
+      emit({ type: 'boss:hit', bossId, success });
 
       return {
         ...prev,

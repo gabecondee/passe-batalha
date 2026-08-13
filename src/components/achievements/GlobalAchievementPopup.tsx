@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Sparkles, Star } from 'lucide-react';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
@@ -27,20 +27,43 @@ export function GlobalAchievementPopup() {
   const today = toISODate(new Date());
   const hasCheckedIn = streakState.last_checkin_date === today;
 
+  // Ref para lock de clique duplo — não causa re-render e persiste durante animações
+  const dismissLockRef = useRef(false);
+
   // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet, or if it is currently open
   if (!hasCompletedOnboarding || isStreakLoading || !hasCheckedIn || isCheckinOpen) return null;
 
-  const handleDismiss = async () => {
-    if (popup && user) {
-      // Ignore errors silently as this is just a notification flag
+  const handleDismiss = () => {
+    if (!popup || dismissLockRef.current) return;
+    dismissLockRef.current = true;
+
+    // 1. Captura o id antes de qualquer setState
+    const achievementId = popup.id;
+
+    // 2. Fecha o popup IMEDIATAMENTE — nunca trava a UI
+    dismissPopup(achievementId, false);
+
+    // 3. Sincroniza com o banco em segundo plano (fire-and-forget)
+    if (user) {
       supabase
         .from('user_achievements')
         .update({ notified: true })
         .eq('user_id', user.id)
-        .eq('achievement_id', popup.id)
-        .then();
+        .eq('achievement_id', achievementId)
+        .select()
+        .then(({ data, error }) => {
+          if (!error && data && data.length > 0) {
+            // Sucesso: atualiza o cache local para notified confirmado
+            dismissPopup(achievementId, true);
+          } else {
+            // Falha: pendingSyncIds já foi setado pelo dismissPopup(false) acima
+            console.warn('Falha ao sincronizar conquista no banco:', error?.message);
+          }
+          dismissLockRef.current = false;
+        });
+    } else {
+      dismissLockRef.current = false;
     }
-    dismissPopup();
   };
 
   return (
@@ -63,7 +86,7 @@ export function GlobalAchievementPopup() {
             )}
             style={{ borderColor: RARITY_META[popup.rarity].colorHex }}
           >
-            <button onClick={handleDismiss} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground">
+            <button onClick={handleDismiss} className="absolute top-3 right-3 text-muted-foreground hover:text-foreground transition">
               <X className="w-4 h-4" />
             </button>
             <div className="flex items-center justify-center gap-2 mb-2">

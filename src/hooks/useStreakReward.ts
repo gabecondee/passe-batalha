@@ -43,6 +43,19 @@ export const STREAK_MILESTONES: { day: number; bonus: number }[] = [
   { day: 30, bonus: 150 },
   { day: 60, bonus: 350 },
   { day: 100, bonus: 700 },
+  { day: 150, bonus: 200 },
+  { day: 200, bonus: 250 },
+  { day: 250, bonus: 300 },
+  { day: 300, bonus: 350 },
+  { day: 365, bonus: 1000 }, // 1 ano
+  { day: 400, bonus: 450 },
+  { day: 450, bonus: 500 },
+  { day: 500, bonus: 550 },
+  { day: 550, bonus: 600 },
+  { day: 600, bonus: 700 },
+  { day: 650, bonus: 800 },
+  { day: 700, bonus: 900 },
+  { day: 730, bonus: 2000 }, // 2 anos
 ];
 
 export const DAILY_FRAGMENTS = 10;

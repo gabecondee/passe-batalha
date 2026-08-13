@@ -39,6 +39,7 @@ export function useAchievementsData() {
   const [popupQueue, setPopupQueue] = useState<AchievementStatus[]>([]);
   
   const [unlockedMap, setUnlockedMap] = useState<Record<string, { date: string, notified: boolean }>>({});
+  const [pendingSyncIds, setPendingSyncIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
   const [dbStats, setDbStats] = useState({
     trainings_completed: 0,
@@ -56,6 +57,34 @@ export function useAchievementsData() {
       return;
     }
     const fetchDb = async () => {
+      // 1. Reconciliação (Retry) de falhas anteriores
+      const pendingKey = `pending_sync_achievements_${authUser.id}`;
+      const pendingIds: string[] = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+      
+      if (pendingIds.length > 0) {
+        const stillPending: string[] = [];
+        for (const pid of pendingIds) {
+          const { data, error } = await supabase
+            .from('user_achievements')
+            .update({ notified: true })
+            .eq('user_id', authUser.id)
+            .eq('achievement_id', pid)
+            .select();
+            
+          if (!error && data && data.length > 0) {
+            // Sucesso na repescagem, adiciona ao cache oficial
+            const localKey = `local_notified_achievements_${authUser.id}`;
+            const localNotified = JSON.parse(localStorage.getItem(localKey) || '[]');
+            if (!localNotified.includes(pid)) {
+              localStorage.setItem(localKey, JSON.stringify([...localNotified, pid]));
+            }
+          } else {
+            stillPending.push(pid);
+          }
+        }
+        localStorage.setItem(pendingKey, JSON.stringify(stillPending));
+      }
+
       const [statsRes, achRes] = await Promise.all([
         supabase.from('user_stats').select('*').eq('user_id', authUser.id).maybeSingle(),
         supabase.from('user_achievements').select('*').eq('user_id', authUser.id)
@@ -130,7 +159,8 @@ export function useAchievementsData() {
       e.type === 'finance:changed' ||
       e.type === 'xp:gained' ||
       e.type === 'fragments:changed' ||
-      (e.type as string) === 'diet:plan-created'
+      (e.type as string) === 'diet:plan-created' ||
+      (e.type as string) === 'boss:hit'
     ) {
       setTick((t) => t + 1);
     }
@@ -240,10 +270,10 @@ export function useAchievementsData() {
     const unlockedItems = achievements.filter(a => a.unlocked);
     
     // 1. Brand new unlocks (not in map yet)
-    const brandNewItems = unlockedItems.filter(a => !unlockedMap[a.id]);
+    const brandNewItems = unlockedItems.filter(a => !unlockedMap[a.id] && !pendingSyncIds.has(a.id));
     
     // 2. Unlocked previously but not notified
-    const unnotifiedItems = unlockedItems.filter(a => unlockedMap[a.id] && !unlockedMap[a.id].notified);
+    const unnotifiedItems = unlockedItems.filter(a => unlockedMap[a.id] && !unlockedMap[a.id].notified && !pendingSyncIds.has(a.id));
 
     if (brandNewItems.length > 0) {
       const now = new Date().toISOString();
@@ -252,10 +282,14 @@ export function useAchievementsData() {
       brandNewItems.forEach(a => { newMap[a.id] = { date: now, notified: false }; });
       setUnlockedMap(newMap);
 
-      // Fallback storage para caso o BD falhe em atualizar o notified
-      const localNotified = JSON.parse(localStorage.getItem('local_notified_achievements') || '[]');
+      // Fallback storage para caso o BD falhe em atualizar o notified, escopado pelo userId
+      const storageKey = `local_notified_achievements_${authUser.id}`;
+      const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
 
-      brandNewItems.forEach(async (a) => {
+      // 1. Filtrar as que realmente precisam de popup (não estão no local storage)
+      const needsPopup = brandNewItems.filter(a => !localNotified.includes(a.id));
+
+      needsPopup.forEach(async (a) => {
         const { error } = await supabase.from('user_achievements').upsert({
           user_id: authUser.id,
           achievement_id: a.id,
@@ -274,21 +308,27 @@ export function useAchievementsData() {
       
       setPopupQueue(prev => {
         const existingIds = new Set(prev.map(p => p.id));
-        const toAdd = brandNewItems.filter(a => !existingIds.has(a.id));
+        const toAdd = needsPopup.filter(a => !existingIds.has(a.id));
         return [...prev, ...toAdd];
       });
     }
 
     if (unnotifiedItems.length > 0) {
-      // Já estão no DB, apenas enfileirar para popup
-      setPopupQueue(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        const toAdd = unnotifiedItems.filter(a => !existingIds.has(a.id));
-        return [...prev, ...toAdd];
-      });
+      // Já estão no DB, mas precisamos garantir que não foram vistas offline/cache
+      const storageKey = `local_notified_achievements_${authUser.id}`;
+      const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const needsPopup = unnotifiedItems.filter(a => !localNotified.includes(a.id));
+
+      if (needsPopup.length > 0) {
+        setPopupQueue(prev => {
+          const existingIds = new Set(prev.map(p => p.id));
+          const toAdd = needsPopup.filter(a => !existingIds.has(a.id));
+          return [...prev, ...toAdd];
+        });
+      }
     }
     
-  }, [achievements, addAttributeXp, unlockedMap, authUser]);
+  }, [achievements, addAttributeXp, unlockedMap, authUser, pendingSyncIds]);
 
 
   useEffect(() => {
@@ -298,7 +338,40 @@ export function useAchievementsData() {
     }
   }, [popup, popupQueue]);
 
-  const dismissPopup = useCallback(() => setPopup(null), []);
+  const dismissPopup = useCallback((achievementId: string, syncSuccess: boolean) => {
+    if (syncSuccess) {
+      // Sucesso total no banco
+      setUnlockedMap(prev => ({
+        ...prev,
+        [achievementId]: { ...prev[achievementId], notified: true }
+      }));
+      
+      if (authUser) {
+        try {
+          const storageKey = `local_notified_achievements_${authUser.id}`;
+          const localNotified = JSON.parse(localStorage.getItem(storageKey) || '[]');
+          if (!localNotified.includes(achievementId)) {
+            localStorage.setItem(storageKey, JSON.stringify([...localNotified, achievementId]));
+          }
+        } catch {}
+      }
+    } else {
+      // Falha no banco - Adicionar ao cache temporário (memória) para evitar loop na sessão
+      setPendingSyncIds(prev => new Set(prev).add(achievementId));
+      
+      if (authUser) {
+        try {
+          const pendingKey = `pending_sync_achievements_${authUser.id}`;
+          const pendingIds = JSON.parse(localStorage.getItem(pendingKey) || '[]');
+          if (!pendingIds.includes(achievementId)) {
+            localStorage.setItem(pendingKey, JSON.stringify([...pendingIds, achievementId]));
+          }
+        } catch {}
+      }
+    }
+
+    setPopup(null);
+  }, [authUser]);
 
   const summary = useMemo(() => {
     const total = achievements.length;

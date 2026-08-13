@@ -111,7 +111,7 @@ export function BossQuizDialog({ open, onOpenChange }: Props) {
     if (!open) {
       setStep(0);
       setProblem('');
-      setSelectedArea('Mental');
+      setSelectedArea('' as AttributeArea);
       setScores({});
       setLoading(false);
       setLoadingMsgIdx(0);

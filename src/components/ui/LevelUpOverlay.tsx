@@ -112,7 +112,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
             initial={{ scale: 0, rotate: -10 }}
             animate={{ scale: 1, rotate: 0 }}
             exit={{ scale: 0.8, opacity: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 20 }}
           >
             {/* Particles */}
             {particles.map((i) => (
@@ -124,7 +124,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
               className="flex items-center gap-2 px-6 py-2 rounded-full border border-primary/50 bg-primary/10 backdrop-blur-md"
               initial={{ y: -20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.3, duration: 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               <Star className="w-4 h-4 text-primary fill-primary" />
               <span className="font-display text-sm tracking-[0.3em] text-primary uppercase">Level Up!</span>
@@ -136,7 +136,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
               className="relative flex flex-col items-center"
               initial={{ scale: 0.3, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 15, delay: 0.2 }}
+              transition={{ type: 'spring', stiffness: 400, damping: 15 }}
             >
               {/* Glow behind number */}
               <div
@@ -161,7 +161,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
               className="flex items-center gap-2"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.5, duration: 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               <TrendingUp className="w-4 h-4 text-muted-foreground" />
               <span className="font-display text-sm text-muted-foreground tracking-widest uppercase">
@@ -175,7 +175,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
               className="mt-4 flex items-start gap-3 max-w-sm p-4 rounded-2xl border border-primary/30 bg-card/80 backdrop-blur-md"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.7, duration: 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               <img
                 src={hakimMascot}
@@ -195,7 +195,7 @@ export function LevelUpOverlay({ level, show, onComplete }: LevelUpOverlayProps)
               className="mt-2 px-8 py-3 rounded-xl font-display tracking-widest uppercase text-sm text-primary-foreground bg-primary hover:bg-primary/90 transition shadow-[0_0_30px_hsl(var(--primary)/0.6)]"
               initial={{ y: 20, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.9, duration: 0.4 }}
+              transition={{ duration: 0.3 }}
             >
               Continuar Jornada
             </motion.button>
