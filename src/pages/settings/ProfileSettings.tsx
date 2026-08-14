@@ -35,6 +35,7 @@ export default function ProfileSettings() {
   const [height, setHeight] = useState<string>('');
   const [gender, setGender] = useState<string>('');
   const [saving, setSaving] = useState(false);
+  const [compressing, setCompressing] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Carregar dados diretamente do Supabase ao montar a tela
@@ -79,11 +80,48 @@ export default function ProfileSettings() {
     }
   }, [birthDate]);
 
-  const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+  /** Comprime a imagem para no máximo 800×800px, JPEG 80% de qualidade */
+  const compressImage = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      const objectUrl = URL.createObjectURL(file);
+      img.onload = () => {
+        URL.revokeObjectURL(objectUrl);
+        const MAX = 800;
+        let { width, height } = img;
+        if (width > MAX || height > MAX) {
+          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
+          else { width = Math.round((width * MAX) / height); height = MAX; }
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = reject;
+      img.src = objectUrl;
+    });
+
+  const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    // Reset o valor para permitir selecionar o mesmo arquivo novamente
+    e.target.value = '';
     if (!file) return;
-    if (!file.type.startsWith('image/')) return toast.error('Selecione uma imagem');
-    updateAvatar(URL.createObjectURL(file));
+    if (!file.type.startsWith('image/')) return toast.error('Selecione uma imagem válida (JPG, PNG, etc)');
+    if (file.size > 10 * 1024 * 1024) return toast.error('Imagem muito grande. Máximo 10MB.');
+
+    setCompressing(true);
+    try {
+      const compressed = await compressImage(file);
+      updateAvatar(compressed);
+      toast.success('Foto atualizada! Clique em Salvar para confirmar.');
+    } catch {
+      toast.error('Erro ao processar a imagem. Tente outra.');
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const removePhoto = () => {
@@ -145,14 +183,22 @@ export default function ProfileSettings() {
             <img src={user.avatar} alt={user.name} className="w-28 h-28 rounded-full object-cover border-2 border-primary/60 shadow-[0_0_20px_hsl(var(--primary)/0.5)]" />
           </div>
           <div className="flex flex-wrap gap-2 justify-center">
-            <button onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/50 text-primary text-xs font-display hover:bg-primary/10">
-              <Camera className="w-4 h-4" /> Alterar Foto
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={compressing}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/50 text-primary text-xs font-display hover:bg-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {compressing ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Comprimindo...</>
+              ) : (
+                <><Camera className="w-4 h-4" /> Alterar Foto</>
+              )}
             </button>
             <button onClick={removePhoto} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-display hover:bg-destructive/10">
               <Trash2 className="w-4 h-4" /> Remover
             </button>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" capture="user" onChange={onFile} className="hidden" />
+          <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
         </div>
 
         {/* Fields card */}

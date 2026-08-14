@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, ChevronRight, Upload, RefreshCw, Check, Loader2, Shield, Camera, Plus, Dumbbell, Brain, Sparkle, Briefcase, DollarSign, ArrowLeft, Mail, Lock, Download } from 'lucide-react';
+import { Sparkles, ChevronRight, Upload, RefreshCw, Check, Loader2, Shield, Camera, Plus, Dumbbell, Brain, Sparkle, Briefcase, DollarSign, ArrowLeft, Mail, Lock, Download, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
@@ -66,6 +66,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [loginMode, setLoginMode] = useState<'firstAccess' | 'returning'>('returning');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [chosenClass, setChosenClass] = useState<ClassKey | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
@@ -170,46 +172,76 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     onComplete({ name: name.trim(), avatar: generatedAvatar, initialSkills: skillValues, class: chosenClass as string });
   };
 
+  /** Traduz erros do Supabase para mensagens amigáveis em português */
+  const translateAuthError = (message: string): string => {
+    const msg = message.toLowerCase();
+    if (msg.includes('invalid login credentials') || msg.includes('invalid email or password'))
+      return 'E-mail ou senha incorretos. Verifique seus dados e tente novamente.';
+    if (msg.includes('email not confirmed'))
+      return 'Seu e-mail ainda não foi confirmado. Verifique sua caixa de entrada.';
+    if (msg.includes('user already registered') || msg.includes('already been registered'))
+      return 'Este e-mail já possui uma conta. Faça login ou recupere sua senha.';
+    if (msg.includes('password should be at least'))
+      return 'A senha deve ter pelo menos 6 caracteres.';
+    if (msg.includes('unable to validate email address'))
+      return 'E-mail inválido. Verifique e tente novamente.';
+    if (msg.includes('too many requests') || msg.includes('rate limit'))
+      return 'Muitas tentativas. Aguarde alguns minutos e tente novamente.';
+    if (msg.includes('network') || msg.includes('fetch'))
+      return 'Erro de conexão. Verifique sua internet e tente novamente.';
+    return 'Ocorreu um erro inesperado. Tente novamente.';
+  };
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    setAuthError(null);
     
     if (!loginEmail || !loginPassword) {
-      toast.error('Por favor, preencha o e-mail e a senha.');
+      setAuthError('Por favor, preencha o e-mail e a senha.');
       return;
     }
 
-    if (loginMode === 'firstAccess') {
-      const { error } = await authService.signUp({ email: loginEmail, password: loginPassword });
-      
-      if (error) {
-        toast.error('Erro no cadastro: ' + error.message);
-        return;
+    setAuthLoading(true);
+    try {
+      if (loginMode === 'firstAccess') {
+        const { error } = await authService.signUp({ email: loginEmail, password: loginPassword });
+        
+        if (error) {
+          const friendly = translateAuthError(error.message);
+          setAuthError(friendly);
+          toast.error(friendly);
+          return;
+        }
+        
+        toast.success('Conta criada! Vamos construir seu personagem.');
+        setTimeout(() => {
+          setScreen('meet');
+        }, 500);
+        
+      } else {
+        const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
+        
+        if (error) {
+          const friendly = translateAuthError(error.message);
+          setAuthError(friendly);
+          toast.error(friendly);
+          return;
+        }
+        
+        toast.success('Bem-vindo de volta, guerreiro!');
+        
+        // O Index.tsx vai escutar a mudança do usuário pelo AuthContext e verificar 
+        // no banco se o onboarding já foi feito. Se sim, ele unmounta este componente
+        // e renderiza o Dashboard.
+        
+        // Se não houver redirecionamento, assumimos que o onboarding está pendente
+        // e vamos para a tela de introdução.
+        setTimeout(() => {
+          setScreen('meet');
+        }, 1000);
       }
-      
-      toast.success('Conta criada! Vamos construir seu personagem.');
-      setTimeout(() => {
-        setScreen('meet');
-      }, 500);
-      
-    } else {
-      const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
-      
-      if (error) {
-        toast.error('Erro no login: ' + error.message);
-        return;
-      }
-      
-      toast.success('Bem-vindo de volta, guerreiro!');
-      
-      // O Index.tsx vai escutar a mudança do usuário pelo AuthContext e verificar 
-      // no banco se o onboarding já foi feito. Se sim, ele unmounta este componente
-      // e renderiza o Dashboard.
-      
-      // Se não houver redirecionamento, assumimos que o onboarding está pendente
-      // e vamos para a tela de introdução.
-      setTimeout(() => {
-        setScreen('meet');
-      }, 1000);
+    } finally {
+      setAuthLoading(false);
     }
   };
 
@@ -375,7 +407,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         <Input
                           type="email"
                           value={loginEmail}
-                          onChange={(e) => setLoginEmail(e.target.value)}
+                          onChange={(e) => { setLoginEmail(e.target.value); setAuthError(null); }}
                           placeholder="E-mail"
                           autoComplete="email"
                           className="pl-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base"
@@ -389,19 +421,44 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         <Input
                           type="password"
                           value={loginPassword}
-                          onChange={(e) => setLoginPassword(e.target.value)}
+                          onChange={(e) => { setLoginPassword(e.target.value); setAuthError(null); }}
                           placeholder="Senha"
                           autoComplete="current-password"
-                          className="pl-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base"
+                          className={`pl-12 h-14 rounded-xl bg-transparent border focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base transition-colors ${
+                            authError
+                              ? 'border-red-500/70 focus-visible:border-red-400'
+                              : 'border-amber-500/50 focus-visible:border-amber-400'
+                          }`}
                         />
                       </div>
 
+                      <AnimatePresence>
+                        {authError && (
+                          <motion.div
+                            key="auth-error"
+                            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -4, scale: 0.97 }}
+                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                            className="w-full flex items-start gap-2.5 px-4 py-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm leading-snug"
+                          >
+                            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-red-400" />
+                            <span>{authError}</span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
                       <Button
                         type="submit"
-                        className="w-full h-14 rounded-xl text-base tracking-[0.18em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.55)] border border-amber-300/60 justify-center items-center gap-2 mt-2"
+                        disabled={authLoading}
+                        className="w-full h-14 rounded-xl text-base tracking-[0.18em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.55)] border border-amber-300/60 justify-center items-center gap-2 mt-2 disabled:opacity-70 disabled:cursor-not-allowed"
                         style={{ fontFamily: 'Inter, sans-serif' }}
                       >
-                        {loginMode === 'firstAccess' ? 'CRIAR CONTA' : 'ENTRAR'}
+                        {authLoading ? (
+                          <><Loader2 className="w-5 h-5 animate-spin" />{loginMode === 'firstAccess' ? 'Criando conta...' : 'Entrando...'}</>
+                        ) : (
+                          loginMode === 'firstAccess' ? 'CRIAR CONTA' : 'ENTRAR'
+                        )}
                       </Button>
 
                       {loginMode === 'firstAccess' ? (
@@ -409,7 +466,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                           <span className="text-slate-400 text-sm">Já tem conta? </span>
                           <button
                             type="button"
-                            onClick={() => setLoginMode('returning')}
+                            onClick={() => { setLoginMode('returning'); setAuthError(null); }}
                             className="text-amber-400 hover:text-amber-300 font-semibold transition"
                           >
                             Faça Login
@@ -428,7 +485,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                             <span className="text-slate-400 text-sm">Ainda não tem conta? </span>
                             <button
                               type="button"
-                              onClick={() => setLoginMode('firstAccess')}
+                              onClick={() => { setLoginMode('firstAccess'); setAuthError(null); }}
                               className="text-amber-400 hover:text-amber-300 font-semibold transition"
                             >
                               Criar conta

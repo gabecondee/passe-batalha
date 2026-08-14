@@ -100,14 +100,42 @@ export function useAchievementsData() {
       }
       
       if (achRes.data) {
+        // localStorage é a fonte de verdade para "notified" neste browser.
+        // Se o usuário já dispensou o popup localmente, não mostramos de novo
+        // mesmo que o banco ainda tenha notified=false (pode ter falhado o sync).
+        const storageKey = `local_notified_achievements_${authUser.id}`;
+        const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+
         const map: Record<string, { date: string, notified: boolean }> = {};
+        const needsDbSync: string[] = []; // achievements notified localmente mas não no banco
+
         achRes.data.forEach(a => {
+          const notifiedLocally = localNotified.includes(a.achievement_id);
+          const notifiedInDb = !!a.notified;
           map[a.achievement_id] = { 
             date: a.unlocked_at || new Date().toISOString(), 
-            notified: !!a.notified 
+            // Considera notified se QUALQUER fonte diz que já foi visto
+            notified: notifiedInDb || notifiedLocally,
           };
+          if (notifiedLocally && !notifiedInDb) {
+            needsDbSync.push(a.achievement_id);
+          }
         });
         setUnlockedMap(map);
+
+        // Sincroniza em background os que estão no localStorage mas não no banco
+        if (needsDbSync.length > 0) {
+          needsDbSync.forEach(aid => {
+            supabase
+              .from('user_achievements')
+              .update({ notified: true })
+              .eq('user_id', authUser.id)
+              .eq('achievement_id', aid)
+              .then(({ error }) => {
+                if (error) console.warn('Sync background notified falhou:', aid, error.message);
+              });
+          });
+        }
       }
       setIsLoaded(true);
     };

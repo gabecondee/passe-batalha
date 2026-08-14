@@ -40,24 +40,33 @@ export function GlobalAchievementPopup() {
     // 1. Captura o id antes de qualquer setState
     const achievementId = popup.id;
 
-    // 2. Fecha o popup IMEDIATAMENTE — nunca trava a UI
-    dismissPopup(achievementId, false);
+    // 2. Grava IMEDIATAMENTE no localStorage — fonte de verdade local
+    //    Isso garante que o popup nunca reaparece neste browser,
+    //    mesmo que o update no banco falhe ou não retorne linhas.
+    if (user) {
+      try {
+        const storageKey = `local_notified_achievements_${user.id}`;
+        const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        if (!localNotified.includes(achievementId)) {
+          localStorage.setItem(storageKey, JSON.stringify([...localNotified, achievementId]));
+        }
+      } catch {}
+    }
 
-    // 3. Sincroniza com o banco em segundo plano (fire-and-forget)
+    // 3. Fecha o popup e marca como notified no estado local
+    dismissPopup(achievementId, true);
+
+    // 4. Sincroniza com o banco em segundo plano (best-effort)
     if (user) {
       supabase
         .from('user_achievements')
         .update({ notified: true })
         .eq('user_id', user.id)
         .eq('achievement_id', achievementId)
-        .select()
-        .then(({ data, error }) => {
-          if (!error && data && data.length > 0) {
-            // Sucesso: atualiza o cache local para notified confirmado
-            dismissPopup(achievementId, true);
-          } else {
-            // Falha: pendingSyncIds já foi setado pelo dismissPopup(false) acima
-            console.warn('Falha ao sincronizar conquista no banco:', error?.message);
+        .then(({ error }) => {
+          if (error) {
+            // Falha silenciosa — localStorage já garantiu que não reaparece
+            console.warn('Falha ao sincronizar conquista no banco (não crítico):', error.message);
           }
           dismissLockRef.current = false;
         });

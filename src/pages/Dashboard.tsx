@@ -270,17 +270,22 @@ export default function Dashboard() {
         </motion.div>
 
         {/* ===== SKILLS RADAR ===== */}
-        <motion.button
-          onClick={() => navigate('/skills')}
+        <motion.div
           className="w-full mt-3 rounded-2xl border border-cyan-400/30 bg-card/70 p-4 text-left hover:border-cyan-400/60 transition shadow-[0_0_25px_rgba(34,211,238,0.08)]"
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.24 }}
         >
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-display text-sm tracking-[0.22em] uppercase text-cyan-400 mx-auto">Árvore de Habilidades</h2>
-            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            <button
+              onClick={() => navigate('/skills')}
+              aria-label="Ver Skills"
+              className="p-1 rounded-lg hover:bg-cyan-400/10 hover:text-cyan-400 text-muted-foreground transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
           </div>
           <SkillsRadar attributes={attributes} />
-        </motion.button>
+        </motion.div>
 
         {/* ===== COMPROMISSOS ===== */}
         <CollapsibleCard

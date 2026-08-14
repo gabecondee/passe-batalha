@@ -261,13 +261,11 @@ export default function Bosses() {
                         <div className="mt-2 space-y-1 text-xs">
                           <p className="flex items-center gap-1 text-muted-foreground">
                             <Skull className="w-3.5 h-3.5 text-foreground/80" />
-                            <span className="text-foreground/80 font-semibold text-xs">Problema:</span>{' '}
                             <span className="text-amber-400 font-semibold">{isLocked ? '???' : boss.class}</span>
                           </p>
                           {!isLocked && (
                             <p className="flex items-center gap-1 text-muted-foreground">
                               <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400/60" />
-                              <span className="text-foreground/80 text-xs">Recompensa:</span>
                               <span className="text-amber-400 font-semibold">+{boss.xpReward} XP em {boss.attributeArea}</span>
                             </p>
                           )}

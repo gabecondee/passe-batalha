@@ -259,12 +259,23 @@
   body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', sans-serif;
+    overflow-x: hidden;
+    transition: background-color 0.5s ease, color 0.3s ease;
+  }
+
+  /* Gradiente fixo de fundo — usa ::before para evitar o bug do iOS Safari
+     onde background-attachment: fixed quebra position: fixed em elementos filhos */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
     background-image: 
       radial-gradient(ellipse at top center, hsl(var(--primary) / 0.10) 0%, transparent 55%),
       radial-gradient(ellipse at bottom, hsl(var(--accent) / 0.06) 0%, transparent 55%);
-    background-attachment: fixed;
-    overflow-x: hidden;
-    transition: background-color 0.5s ease, color 0.3s ease;
+    background-color: hsl(var(--background));
+    transition: background-color 0.5s ease;
   }
 
   h1, h2, h3, h4, h5, h6 {
