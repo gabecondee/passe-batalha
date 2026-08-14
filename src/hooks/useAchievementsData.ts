@@ -269,7 +269,7 @@ export function useAchievementsData() {
       purchasedItems,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, attributes, missions, bosses, battles, transactions, streak, hasCompletedOnboarding, tick]);
+  }, [user, attributes, missions, bosses, battles, transactions, streak, hasCompletedOnboarding, tick, dbStats]);
 
   const achievements = useMemo<AchievementStatus[]>(() => {
     return ALL_ACHIEVEMENTS.map(a => {

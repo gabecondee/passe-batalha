@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Transaction, FinanceSummary } from '@/types/finance';
 import { toast } from '@/hooks/use-toast';
-import { emit } from '@/lib/eventBus';
+import { emit, useBusEvent } from '@/lib/eventBus';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -9,37 +9,42 @@ export function useFinances() {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
 
-  useEffect(() => {
+  const fetchTransactions = useCallback(async () => {
     if (!user) return;
-    
-    const fetchTransactions = async () => {
-      const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false });
-        
-      if (error) {
-        console.error("Erro ao buscar transações:", error);
-        return;
-      }
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false });
       
-      if (data) {
-        const mapped: Transaction[] = data.map(d => ({
-          id: d.id,
-          description: d.description,
-          category: d.category,
-          type: d.type as 'income' | 'expense' | 'investment',
-          date: new Date(d.date),
-          amount: Number(d.amount)
-        }));
-        setTransactions(mapped);
-      }
-    };
+    if (error) {
+      console.error("Erro ao buscar transações:", error);
+      return;
+    }
     
-    fetchTransactions();
+    if (data) {
+      const mapped: Transaction[] = data.map(d => ({
+        id: d.id,
+        description: d.description,
+        category: d.category,
+        type: d.type as 'income' | 'expense' | 'investment',
+        date: new Date(d.date),
+        amount: Number(d.amount)
+      }));
+      setTransactions(mapped);
+    }
   }, [user]);
+
+  useEffect(() => {
+    fetchTransactions();
+  }, [fetchTransactions]);
+
+  useBusEvent(useCallback((e) => {
+    if (e.type === 'finance:changed') {
+      fetchTransactions();
+    }
+  }, [fetchTransactions]));
 
   const incomes = transactions.filter((t) => t.type === 'income');
   const expenses = transactions.filter((t) => t.type === 'expense');

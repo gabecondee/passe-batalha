@@ -714,7 +714,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
             {/* Hakim owl mentor – right side */}
             <div
               aria-hidden
-              className="pointer-events-none absolute top-10 right-0 w-[58%] max-w-[300px] aspect-[3/4] z-0"
+              className="pointer-events-none absolute -top-2 -right-4 w-[55%] max-w-[260px] aspect-[3/4] z-0"
               style={{
                 backgroundImage: `url(${hakim2})`,
                 backgroundSize: 'cover',
@@ -723,7 +723,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                   'radial-gradient(ellipse 80% 75% at 70% 45%, #000 35%, rgba(0,0,0,0.55) 65%, transparent 88%)',
                 maskImage:
                   'radial-gradient(ellipse 80% 75% at 70% 45%, #000 35%, rgba(0,0,0,0.55) 65%, transparent 88%)',
-                opacity: 0.95,
+                opacity: 0.85,
               }}
             />
 
@@ -731,7 +731,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
               <StepIndicator current={4} total={TOTAL_STEPS} />
 
               {/* Intro text / wow text – wow only shown when avatar is ready */}
-              <div className="pr-[42%] mt-4">
+              <div className="pr-[48%] mt-4 relative z-10">
                 {!generatedAvatar ? (
                   <p
                     className="text-slate-200/95 text-[14px] leading-[1.6]"
