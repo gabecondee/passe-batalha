@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, ChevronRight, Upload, RefreshCw, Check, Loader2, Shield, Camera, Plus, Dumbbell, Brain, Sparkle, Briefcase, DollarSign, ArrowLeft, Mail, Lock, Download, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -62,6 +62,7 @@ const SKILL_CARDS = [
 ];
 
 export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
+  const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>('start');
   const [authView, setAuthView] = useState<'intro' | 'login'>('intro');
   const [loginMode, setLoginMode] = useState<'firstAccess' | 'returning'>('returning');
@@ -475,13 +476,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         </div>
                       ) : (
                         <div className="mt-4 flex flex-col items-center gap-4">
-                          <Link
-                            to="/forgot-password"
-                            className="text-slate-400 hover:text-slate-300 text-xs tracking-wider transition"
+                          <button
+                            type="button"
+                            onClick={() => navigate('/forgot-password')}
+                            className="text-slate-400 hover:text-slate-300 text-xs tracking-wider transition relative z-50 cursor-pointer"
                             style={{ fontFamily: 'Inter, sans-serif' }}
                           >
                             Esqueci minha senha
-                          </Link>
+                          </button>
                           <div className="text-center">
                             <span className="text-slate-400 text-sm">Ainda não tem conta? </span>
                             <button

@@ -25,8 +25,8 @@ export default function Ranking() {
       // Buscar profiles com seus respectivos XP's
       const { data } = await supabase.from('profiles').select('id, name, avatar, created_at, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial');
       
-      // Buscar streaks separadamente
-      const { data: streaksData } = await supabase.from('streaks').select('user_id, streak_days');
+      // Buscar streaks separadamente na tabela de economia
+      const { data: streaksData } = await supabase.from('user_economy').select('user_id, streak_days');
       const streakMap = new Map((streaksData || []).map(s => [s.user_id, s.streak_days]));
 
       if (data) {
