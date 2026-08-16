@@ -83,8 +83,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchData = async () => {
+      setMissions([]);
+      setSkills(initialSkills.map(s => ({ ...s, isDefault: true })));
+
       if (!authUser) {
-        setMissions([]);
         return;
       }
       
@@ -129,6 +131,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       const { data, error } = await supabase
         .from('missions')
         .select('*')
+        .eq('user_id', authUser.id)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -160,7 +163,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 3. Fetch Skills (both default and user custom skills)
       const { data: dbSkills, error: skillsError } = await supabase
         .from('skills')
-        .select('*');
+        .select('*')
+        .or(`is_default.eq.true,user_id.eq.${authUser.id}`);
 
       if (!skillsError && dbSkills && dbSkills.length > 0) {
         const mappedSkills: Skill[] = dbSkills.map(s => ({

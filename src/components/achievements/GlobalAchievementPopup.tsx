@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X, Sparkles, Star } from 'lucide-react';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
@@ -17,6 +17,7 @@ import { cn } from '@/lib/utils';
  */
 export function GlobalAchievementPopup() {
   const { popup, dismissPopup } = useAchievementsData();
+  
   const { hasCompletedOnboarding } = useGame();
   const { user } = useAuth();
   const { state: streakState, isLoading: isStreakLoading } = useStreakReward();
@@ -30,11 +31,23 @@ export function GlobalAchievementPopup() {
   // Ref para lock de clique duplo — não causa re-render e persiste durante animações
   const dismissLockRef = useRef(false);
 
+  // IMPORTANTE: o lock precisa ser liberado assim que um NOVO popup aparece na tela,
+  // não apenas quando a sincronização em background do popup ANTERIOR termina.
+  // Antes, se duas conquistas fossem desbloqueadas na mesma ação (ex: completar uma
+  // missão que bate o requisito de 2 conquistas ao mesmo tempo), o clique em
+  // "Continuar Jornada" da segunda conquista era ignorado enquanto o sync da primeira
+  // ainda estava em andamento (100–500ms) — parecendo que era preciso clicar 2 vezes.
+  useEffect(() => {
+    dismissLockRef.current = false;
+  }, [popup?.id]);
+
   // Don't show popups during onboarding, or if the daily check-in hasn't been completed yet, or if it is currently open
   if (!hasCompletedOnboarding || isStreakLoading || !hasCheckedIn || isCheckinOpen) return null;
 
   const handleDismiss = () => {
-    if (!popup || dismissLockRef.current) return;
+    if (!popup || dismissLockRef.current) {
+      return;
+    }
     dismissLockRef.current = true;
 
     // 1. Captura o id antes de qualquer setState
@@ -76,7 +89,7 @@ export function GlobalAchievementPopup() {
   };
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {popup && (
         <motion.div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm"
@@ -84,6 +97,7 @@ export function GlobalAchievementPopup() {
           onClick={handleDismiss}
         >
           <motion.div
+            key={popup.id}
             initial={{ scale: 0.7, y: 30, opacity: 0 }}
             animate={{ scale: 1, y: 0, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}

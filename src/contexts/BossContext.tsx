@@ -88,11 +88,15 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   const [battles, setBattles] = useState<Record<string, BossBattle>>({});
 
   const fetchData = useCallback(async () => {
+    setBattles({});
+    setBosses([]);
     try {
       // 1. Fetch system bosses AND user custom bosses from Supabase
-      const { data: bossesData, error: bossesErr } = await supabase
-        .from('custom_bosses')
-        .select('*')
+      let bossesQuery = supabase.from('custom_bosses').select('*');
+      bossesQuery = user
+        ? bossesQuery.or(`is_system.eq.true,user_id.eq.${user.id}`)
+        : bossesQuery.eq('is_system', true);
+      const { data: bossesData, error: bossesErr } = await bossesQuery
         .order('created_at', { ascending: false });
 
       if (!bossesErr && bossesData) {

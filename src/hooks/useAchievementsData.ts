@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useCallback } from 'react';
+import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { ALL_ACHIEVEMENTS, AchievementDef, Rarity, Requirement } from '@/data/achievementsData';
 import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
@@ -38,6 +38,11 @@ export function useAchievementsData() {
   const [popup, setPopup] = useState<AchievementStatus | null>(null);
   const [popupQueue, setPopupQueue] = useState<AchievementStatus[]>([]);
   
+  const currentPopupIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentPopupIdRef.current = popup?.id || null;
+  }, [popup]);
+  
   const [unlockedMap, setUnlockedMap] = useState<Record<string, { date: string, notified: boolean }>>({});
   const [pendingSyncIds, setPendingSyncIds] = useState<Set<string>>(new Set());
   const [isLoaded, setIsLoaded] = useState(false);
@@ -52,8 +57,19 @@ export function useAchievementsData() {
 
   // Fetch initial data
   useEffect(() => {
+    setUnlockedMap({});
+    setDbStats({
+      trainings_completed: 0,
+      diet_plans_created: 0,
+      journal_entries: 0,
+      seasons_won: 0,
+    });
+    setPendingSyncIds(new Set());
+    setPopup(null);
+    setPopupQueue([]);
+    setIsLoaded(false);
+
     if (!authUser) {
-      setIsLoaded(false);
       return;
     }
     const fetchDb = async () => {
@@ -336,6 +352,7 @@ export function useAchievementsData() {
       
       setPopupQueue(prev => {
         const existingIds = new Set(prev.map(p => p.id));
+        if (currentPopupIdRef.current) existingIds.add(currentPopupIdRef.current);
         const toAdd = needsPopup.filter(a => !existingIds.has(a.id));
         return [...prev, ...toAdd];
       });
@@ -350,6 +367,7 @@ export function useAchievementsData() {
       if (needsPopup.length > 0) {
         setPopupQueue(prev => {
           const existingIds = new Set(prev.map(p => p.id));
+          if (currentPopupIdRef.current) existingIds.add(currentPopupIdRef.current);
           const toAdd = needsPopup.filter(a => !existingIds.has(a.id));
           return [...prev, ...toAdd];
         });

@@ -40,6 +40,8 @@ import Achievements from "./pages/Achievements";
 import Journal from "./pages/Journal";
 import NotFound from "./pages/NotFound";
 import OnboardingPreview from "./pages/OnboardingPreview";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -55,6 +57,8 @@ const App = () => (
               <BrowserRouter>
               <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding-preview" element={<OnboardingPreview />} />
               <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
               <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
