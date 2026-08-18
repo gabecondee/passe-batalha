@@ -1,41 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
 
 export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
-  const [subLoading, setSubLoading] = useState(true);
-  const [hasActiveSubscription, setHasActiveSubscription] = useState(false);
+  const subStatus = useSubscriptionStatus(user?.id);
 
-  useEffect(() => {
-    if (!user) {
-      setSubLoading(false);
-      return;
-    }
-    
-    supabase
-      .from('cakto_subscriptions')
-      .select('status')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .maybeSingle()
-      .then(({ data }) => {
-        setHasActiveSubscription(!!data);
-        setSubLoading(false);
-      });
-  }, [user]);
-
-  if (isLoading || subLoading) {
+  if (isLoading || subStatus === 'checking') {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#02030a]">
-        <div className="flex flex-col items-center gap-4 text-amber-500">
-          <Loader2 className="w-8 h-8 animate-spin" />
-          <p className="text-sm tracking-widest font-semibold uppercase" style={{ fontFamily: 'Inter, sans-serif' }}>
-            Carregando...
-          </p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0c1830]">
+        <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
       </div>
     );
   }
@@ -44,10 +21,19 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     return <Navigate to="/" replace />;
   }
 
-  if (!hasActiveSubscription) {
+  if (subStatus === 'error') {
+    // Falha ao verificar não deve derrubar a sessão do usuário.
+    // Loga o erro e deixa passar (fail-open) em vez de expulsar alguém por soluço de rede.
+    console.warn('Falha temporária ao verificar assinatura. Liberando acesso (fail-open).');
+    return <>{children}</>;
+  }
+
+  if (subStatus === 'inactive') {
+    // Apenas desloga e redireciona se tivermos certeza que a assinatura não está ativa
     supabase.auth.signOut();
     return <Navigate to="/assinatura-inativa" replace />;
   }
 
+  // Se for 'active', libera a rota protegida
   return <>{children}</>;
 };

@@ -4,6 +4,8 @@ import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle, Download, Calendar } 
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/contexts/AuthContext';
+import { useSubscriptionStatus } from '@/hooks/useSubscriptionStatus';
 import { toast } from 'sonner';
 
 function dumpLocalStorage() {
@@ -61,22 +63,24 @@ export default function AccountSettings() {
     navigate('/', { replace: true });
   };
 
+  const { user } = useAuth();
+  const subStatus = useSubscriptionStatus(user?.id);
   const [subData, setSubData] = useState<any>(null);
 
   useEffect(() => {
-    async function fetchSub() {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    if (subStatus !== 'active' || !user) return;
+    
+    async function fetchSubDetails() {
       const { data } = await supabase
         .from('cakto_subscriptions')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('user_id', user!.id)
         .eq('status', 'active')
         .maybeSingle();
       if (data) setSubData(data);
     }
-    fetchSub();
-  }, []);
+    fetchSubDetails();
+  }, [subStatus, user]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return '--';
@@ -93,7 +97,11 @@ export default function AccountSettings() {
             <Calendar className="w-4 h-4" /> Dados da Assinatura
           </h3>
           <div className="flex items-center justify-between border border-border/60 rounded-lg p-4 bg-background/50">
-            {subData ? (
+            {subStatus === 'checking' ? (
+              <p className="text-sm text-muted-foreground animate-pulse">Verificando assinatura...</p>
+            ) : subStatus === 'error' ? (
+              <p className="text-sm text-destructive">Erro ao carregar dados da assinatura.</p>
+            ) : subStatus === 'active' && subData ? (
               <div className="flex w-full justify-between items-center">
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground uppercase tracking-wider font-display">Ativação / Renovação</p>
