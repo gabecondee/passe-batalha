@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { authService } from '@/services/auth';
+import { useAuth } from '@/contexts/AuthContext';
 import { StepIndicator } from './StepIndicator';
 import hakimImage from '@/assets/hakim-mascot.png';
 import hakimV2 from '@/assets/hakim-mascot-v2.jpeg';
@@ -63,7 +64,10 @@ const SKILL_CARDS = [
 
 export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const navigate = useNavigate();
-  const [screen, setScreen] = useState<Screen>('start');
+  const { user } = useAuth();
+  
+  // Use state with a function to determine initial screen synchronously
+  const [screen, setScreen] = useState<Screen>(user ? 'meet' : 'start');
   const [authView, setAuthView] = useState<'intro' | 'login'>('intro');
   const loginMode = 'returning';
   const [loginEmail, setLoginEmail] = useState('');
@@ -71,6 +75,13 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [name, setName] = useState('');
+
+  // Auto-skip start screen if user becomes authenticated
+  useEffect(() => {
+    if (user && screen === 'start') {
+      setScreen('meet');
+    }
+  }, [user, screen]);
   const [chosenClass, setChosenClass] = useState<ClassKey | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [generatedAvatar, setGeneratedAvatar] = useState<string | null>(null);
@@ -302,25 +313,14 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                     <p className="text-slate-400 text-sm sm:text-base mb-12 max-w-xs leading-relaxed">
                       A vida é como um jogo,<br/>apenas jogue...
                     </p>
-
                     <div className="flex flex-col gap-5 w-full max-w-xs items-center">
                       <Button
-                        onClick={() => { setLoginMode('firstAccess'); setAuthView('login'); }}
+                        onClick={() => { setAuthView('login'); }}
                         className="w-full h-14 rounded-xl text-base tracking-[0.18em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.55)] border border-amber-300/60 justify-center items-center gap-2"
                         style={{ fontFamily: 'Inter, sans-serif' }}
                       >
-                        PRIMEIRO ACESSO
+                        ENTRAR
                       </Button>
-
-                      <button
-                        type="button"
-                        onClick={() => { setLoginMode('returning'); setAuthView('login'); }}
-                        className="flex items-center gap-2 text-blue-400/90 hover:text-blue-300 text-xs tracking-[0.22em] uppercase font-semibold transition"
-                        style={{ fontFamily: 'Inter, sans-serif' }}
-                      >
-                        <Shield className="w-4 h-4" />
-                        Já tenho uma conta
-                      </button>
                     </div>
                   </motion.div>
                 )}
