@@ -2,8 +2,10 @@ import React, { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Lock, Loader2 } from 'lucide-react';
+import { Lock, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
+import logoSrc from '@/assets/logo.png';
+import { motion } from 'framer-motion';
 
 interface SetPasswordProps {
   onComplete: () => void;
@@ -13,6 +15,8 @@ export const SetPassword = ({ onComplete }: SetPasswordProps) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,33 +62,58 @@ export const SetPassword = ({ onComplete }: SetPasswordProps) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0c1830] p-4">
-      <div className="w-full max-w-md bg-[#05080f]/90 p-8 rounded-3xl border border-amber-500/20 shadow-2xl flex flex-col items-center text-center">
-        <div className="w-16 h-16 bg-amber-500/10 rounded-full flex items-center justify-center text-amber-500 mb-6 border border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.2)]">
-          <Lock className="w-8 h-8" />
-        </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0c1830] p-4 text-center">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5, ease: 'easeOut' }}
+        className="w-full max-w-xs flex flex-col items-center"
+      >
+        <motion.div
+          initial={{ opacity: 0, scale: 0.85 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.5, ease: 'easeOut', delay: 0.1 }}
+          className="mb-6"
+        >
+          <img
+            src={logoSrc}
+            alt="Passe de Batalha"
+            className="w-[90px] h-[90px] object-contain drop-shadow-[0_0_25px_rgba(245,158,11,0.7)] rounded-full"
+          />
+        </motion.div>
         
-        <h1 className="text-2xl font-bold text-amber-400 mb-2 tracking-wider" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-          BEM-VINDO
+        <h1 
+          className="text-white text-4xl font-bold mb-3 uppercase" 
+          style={{ fontFamily: 'Orbitron, sans-serif' }}
+        >
+          CRIAR SENHA
         </h1>
         
-        <p className="text-slate-400 text-sm mb-8 leading-relaxed">
-          Defina uma senha segura para acessar sua conta futuramente.
+        <p className="text-slate-400 text-sm mb-10 max-w-xs leading-relaxed">
+          Defina uma senha segura para acessar sua conta nas próximas vezes.
         </p>
 
-        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4 items-center">
           <div className="relative w-full">
             <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-amber-500">
               <Lock className="w-5 h-5" />
             </span>
             <Input
-              type="password"
+              type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Nova senha (min. 6 caracteres)"
+              placeholder="Nova senha (min. 6 caract.)"
               required
-              className="pl-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70"
+              className="pl-12 pr-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-500 transition-colors"
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
           <div className="relative w-full">
@@ -92,25 +121,33 @@ export const SetPassword = ({ onComplete }: SetPasswordProps) => {
               <Lock className="w-5 h-5" />
             </span>
             <Input
-              type="password"
+              type={showConfirmPassword ? "text" : "password"}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               placeholder="Confirme a nova senha"
               required
-              className="pl-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70"
+              className="pl-12 pr-12 h-14 rounded-xl bg-transparent border border-amber-500/50 focus-visible:border-amber-400 focus-visible:ring-0 text-white placeholder:text-slate-400/70 text-base"
             />
+            <button
+              type="button"
+              onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-500 transition-colors"
+              tabIndex={-1}
+            >
+              {showConfirmPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
           </div>
 
           <Button 
             type="submit" 
             disabled={loading}
-            className="w-full bg-amber-500 hover:bg-amber-600 text-[#05080f] font-bold h-14 rounded-xl text-base tracking-widest transition-all mt-4"
+            className="w-full h-14 mt-4 rounded-xl text-base tracking-[0.18em] font-bold text-[#1a1208] bg-gradient-to-b from-amber-300 via-amber-400 to-amber-500 hover:from-amber-200 hover:to-amber-400 shadow-[0_0_35px_rgba(245,158,11,0.55)] border border-amber-300/60 justify-center items-center gap-2"
             style={{ fontFamily: 'Inter, sans-serif' }}
           >
-            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'SALVAR E CONTINUAR'}
+            {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'SALVAR E ENTRAR'}
           </Button>
         </form>
-      </div>
+      </motion.div>
     </div>
   );
 };
