@@ -6,6 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Loader2 } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
 const Index = () => {
   const [loading, setLoading] = useState(true);
@@ -76,7 +77,11 @@ const Index = () => {
     return <OnboardingWizard onComplete={handleCompleteOnboarding} />;
   }
 
-  return <Dashboard />;
+  return (
+    <ProtectedRoute>
+      <Dashboard />
+    </ProtectedRoute>
+  );
 };
 
 export default Index;

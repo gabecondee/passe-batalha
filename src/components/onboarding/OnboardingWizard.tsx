@@ -216,13 +216,30 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
     setAuthLoading(true);
     try {
-      const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
+      const { data: authData, error } = await authService.signIn({ email: loginEmail, password: loginPassword });
       
       if (error) {
         const friendly = translateAuthError(error.message);
         setAuthError(friendly);
         toast.error(friendly);
         return;
+      }
+
+      if (authData?.user) {
+        // Verificar assinatura logo após login
+        const { data: subData } = await supabase
+          .from('cakto_subscriptions')
+          .select('status')
+          .eq('user_id', authData.user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+        if (!subData) {
+          await supabase.auth.signOut();
+          setAuthError('Conta inativa. Renove sua assinatura na Cakto para acessar.');
+          toast.error('Conta inativa. Renove sua assinatura.');
+          return;
+        }
       }
       
       toast.success('Bem-vindo de volta, guerreiro!');
