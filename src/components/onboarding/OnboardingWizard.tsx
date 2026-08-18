@@ -65,7 +65,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
   const navigate = useNavigate();
   const [screen, setScreen] = useState<Screen>('start');
   const [authView, setAuthView] = useState<'intro' | 'login'>('intro');
-  const [loginMode, setLoginMode] = useState<'firstAccess' | 'returning'>('returning');
+  const loginMode = 'returning';
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -205,43 +205,19 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
     setAuthLoading(true);
     try {
-      if (loginMode === 'firstAccess') {
-        const { error } = await authService.signUp({ email: loginEmail, password: loginPassword });
-        
-        if (error) {
-          const friendly = translateAuthError(error.message);
-          setAuthError(friendly);
-          toast.error(friendly);
-          return;
-        }
-        
-        toast.success('Conta criada! Vamos construir seu personagem.');
-        setTimeout(() => {
-          setScreen('meet');
-        }, 500);
-        
-      } else {
-        const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
-        
-        if (error) {
-          const friendly = translateAuthError(error.message);
-          setAuthError(friendly);
-          toast.error(friendly);
-          return;
-        }
-        
-        toast.success('Bem-vindo de volta, guerreiro!');
-        
-        // O Index.tsx vai escutar a mudança do usuário pelo AuthContext e verificar 
-        // no banco se o onboarding já foi feito. Se sim, ele unmounta este componente
-        // e renderiza o Dashboard.
-        
-        // Se não houver redirecionamento, assumimos que o onboarding está pendente
-        // e vamos para a tela de introdução.
-        setTimeout(() => {
-          setScreen('meet');
-        }, 1000);
+      const { error } = await authService.signIn({ email: loginEmail, password: loginPassword });
+      
+      if (error) {
+        const friendly = translateAuthError(error.message);
+        setAuthError(friendly);
+        toast.error(friendly);
+        return;
       }
+      
+      toast.success('Bem-vindo de volta, guerreiro!');
+    } catch (err) {
+      console.error(err);
+      toast.error('Erro de conexão ao entrar.');
     } finally {
       setAuthLoading(false);
     }
@@ -384,19 +360,13 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                       className="text-white text-4xl sm:text-5xl font-bold mb-3 uppercase"
                       style={{ fontFamily: 'Orbitron, sans-serif' }}
                     >
-                      {loginMode === 'firstAccess' ? 'CRIAR CONTA' : 'ENTRAR'}
-                    </h1>
-                    <p className="text-slate-400 text-sm sm:text-base mb-10 max-w-xs leading-relaxed">
-                      {loginMode === 'firstAccess' ? (
-                        <>
-                          Utilize o e-mail informado na compra
-                          <br />
-                          para acessar sua conta.
-                        </>
-                      ) : (
-                        'Bem-vindo de volta. Continue sua jornada.'
-                      )}
-                    </p>
+                      ENTRAR
+                      </h1>
+                      <p className="text-slate-400 text-sm sm:text-base mb-10 max-w-xs leading-relaxed">
+                        Bem-vindo de volta. Continue sua jornada.
+                        <br/><br/>
+                        <span className="text-amber-500/80 text-xs">Recebeu um convite? Verifique seu e-mail e clique no link para acessar.</span>
+                      </p>
 
                     <form
                       onSubmit={handleAuth}
@@ -457,10 +427,10 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                         style={{ fontFamily: 'Inter, sans-serif' }}
                       >
                         {authLoading ? (
-                          <><Loader2 className="w-5 h-5 animate-spin" />{loginMode === 'firstAccess' ? 'Criando conta...' : 'Entrando...'}</>
-                        ) : (
-                          loginMode === 'firstAccess' ? 'CRIAR CONTA' : 'ENTRAR'
-                        )}
+                          <><Loader2 className="w-5 h-5 animate-spin" />Entrando...</>
+                          ) : (
+                            'ENTRAR'
+                          )}
                       </Button>
 
                       {loginMode === 'firstAccess' ? (

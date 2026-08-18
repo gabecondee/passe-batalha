@@ -42,6 +42,7 @@ import NotFound from "./pages/NotFound";
 import OnboardingPreview from "./pages/OnboardingPreview";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import InactiveSubscription from "./pages/InactiveSubscription";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -60,6 +61,7 @@ const App = () => (
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/onboarding-preview" element={<OnboardingPreview />} />
+              <Route path="/assinatura-inativa" element={<InactiveSubscription />} />
               <Route path="/skills" element={<ProtectedRoute><Skills /></ProtectedRoute>} />
               <Route path="/missions" element={<ProtectedRoute><Missions /></ProtectedRoute>} />
               <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
