@@ -433,39 +433,16 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                           )}
                       </Button>
 
-                      {loginMode === 'firstAccess' ? (
-                        <div className="mt-4 text-center">
-                          <span className="text-slate-400 text-sm">Já tem conta? </span>
-                          <button
-                            type="button"
-                            onClick={() => { setLoginMode('returning'); setAuthError(null); }}
-                            className="text-amber-400 hover:text-amber-300 font-semibold transition"
-                          >
-                            Faça Login
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="mt-4 flex flex-col items-center gap-4">
-                          <button
-                            type="button"
-                            onClick={() => navigate('/forgot-password')}
-                            className="text-slate-400 hover:text-slate-300 text-xs tracking-wider transition relative z-50 cursor-pointer"
-                            style={{ fontFamily: 'Inter, sans-serif' }}
-                          >
-                            Esqueci minha senha
-                          </button>
-                          <div className="text-center">
-                            <span className="text-slate-400 text-sm">Ainda não tem conta? </span>
-                            <button
-                              type="button"
-                              onClick={() => { setLoginMode('firstAccess'); setAuthError(null); }}
-                              className="text-amber-400 hover:text-amber-300 font-semibold transition"
-                            >
-                              Criar conta
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                      <div className="mt-4 flex flex-col items-center gap-4">
+                        <button
+                          type="button"
+                          onClick={() => navigate('/forgot-password')}
+                          className="text-slate-400 hover:text-slate-300 text-xs tracking-wider transition relative z-50 cursor-pointer"
+                          style={{ fontFamily: 'Inter, sans-serif' }}
+                        >
+                          Esqueci minha senha
+                        </button>
+                      </div>
 
                       <div className="w-full px-6 flex flex-col items-center gap-2">
                         <button

@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle, Download } from 'lucide-react';
+import { DoorOpen, Monitor, LogOut, Trash2, AlertTriangle, Download, Calendar } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { supabase } from '@/integrations/supabase/client';
@@ -61,10 +61,58 @@ export default function AccountSettings() {
     navigate('/', { replace: true });
   };
 
+  const [subData, setSubData] = useState<any>(null);
+
+  useEffect(() => {
+    async function fetchSub() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from('cakto_subscriptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (data) setSubData(data);
+    }
+    fetchSub();
+  }, []);
+
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return '--';
+    return new Date(dateStr).toLocaleDateString('pt-BR');
+  };
+
   return (
     <MainLayout>
       <div className="space-y-6 max-w-2xl mx-auto pb-8">
         <SettingsHeader icon={DoorOpen} title="Conta" backTo="/settings" />
+
+        <div className="fantasy-card p-5">
+          <h3 className="font-display uppercase tracking-wider text-sm text-primary flex items-center gap-2 mb-3">
+            <Calendar className="w-4 h-4" /> Dados da Assinatura
+          </h3>
+          <div className="flex items-center justify-between border border-border/60 rounded-lg p-4 bg-background/50">
+            {subData ? (
+              <div className="flex w-full justify-between items-center">
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-display">Ativação / Renovação</p>
+                  <p className="text-sm font-medium text-white">
+                    {formatDate(subData.created_at || subData.start_date || subData.current_period_start)}
+                  </p>
+                </div>
+                <div className="text-right space-y-1">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider font-display">Expiração</p>
+                  <p className="text-sm font-medium text-amber-400">
+                    {formatDate(subData.expires_at || subData.end_date || subData.current_period_end || subData.next_billing_at)}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nenhuma assinatura ativa encontrada.</p>
+            )}
+          </div>
+        </div>
 
         <div className="fantasy-card p-5">
           <h3 className="font-display uppercase tracking-wider text-sm text-primary flex items-center gap-2 mb-3">
