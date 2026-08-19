@@ -229,12 +229,23 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
         // Verificar assinatura logo após login
         const { data: subData } = await supabase
           .from('cakto_subscriptions')
-          .select('status')
+          .select('status, current_period_end')
           .eq('user_id', authData.user.id)
           .eq('status', 'active')
           .maybeSingle();
 
-        if (!subData) {
+        let isInactive = !subData;
+
+        if (subData?.current_period_end) {
+          const GRACE_PERIOD_DAYS = 2;
+          const expiresAt = new Date(subData.current_period_end).getTime();
+          const graceDeadline = expiresAt + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+          if (Date.now() > graceDeadline) {
+            isInactive = true;
+          }
+        }
+
+        if (isInactive) {
           await supabase.auth.signOut();
           setAuthError('Conta inativa. Renove sua assinatura na Cakto para acessar.');
           toast.error('Conta inativa. Renove sua assinatura.');

@@ -27,7 +27,7 @@ export function useSubscriptionStatus(userId: string | null | undefined): Subscr
       // Agora podemos consultar com segurança a tabela RLS
       const { data, error } = await supabase
         .from('cakto_subscriptions')
-        .select('status')
+        .select('status, current_period_end')
         .eq('user_id', userId)
         .eq('status', 'active')
         .maybeSingle();
@@ -40,7 +40,24 @@ export function useSubscriptionStatus(userId: string | null | undefined): Subscr
         return;
       }
 
-      setStatus(data ? 'active' : 'inactive');
+      if (!data) {
+        setStatus('inactive');
+        return;
+      }
+
+      const GRACE_PERIOD_DAYS = 2;
+
+      if (data.current_period_end) {
+        const expiresAt = new Date(data.current_period_end).getTime();
+        const graceDeadline = expiresAt + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000;
+
+        if (Date.now() > graceDeadline) {
+          setStatus('inactive');
+          return;
+        }
+      }
+
+      setStatus('active');
     }
 
     check();
