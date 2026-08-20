@@ -205,6 +205,15 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
     return 'Ocorreu um erro inesperado. Tente novamente.';
   };
 
+  function normalizePasswordIfLooksLikeCpf(password: string): string {
+    const digitsOnly = password.replace(/\D/g, '');
+    const hasNonDigitChars = /\D/.test(password);
+    if (hasNonDigitChars && digitsOnly.length === 11) {
+      return digitsOnly;
+    }
+    return password;
+  }
+
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
@@ -216,7 +225,8 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
 
     setAuthLoading(true);
     try {
-      const { data: authData, error } = await authService.signIn({ email: loginEmail, password: loginPassword });
+      const normalizedPassword = normalizePasswordIfLooksLikeCpf(loginPassword);
+      const { data: authData, error } = await authService.signIn({ email: loginEmail, password: normalizedPassword });
       
       if (error) {
         const friendly = translateAuthError(error.message);
@@ -393,7 +403,7 @@ export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
                       <p className="text-slate-400 text-sm sm:text-base mb-10 max-w-xs leading-relaxed">
                         Bem-vindo de volta. Continue sua jornada.
                         <br/><br/>
-                        <span className="text-amber-500/80 text-xs">Recebeu um convite? Verifique seu e-mail e clique no link para acessar.</span>
+                        <span className="text-amber-500/80 text-xs">Primeiro acesso? Use o e-mail da sua compra e os números do seu CPF (sem pontos ou traço) como senha. Você poderá trocá-la assim que entrar.</span>
                       </p>
 
                     <form

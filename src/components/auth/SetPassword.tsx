@@ -90,7 +90,7 @@ export const SetPassword = ({ onComplete }: SetPasswordProps) => {
         </h1>
         
         <p className="text-slate-400 text-sm mb-10 max-w-xs leading-relaxed">
-          Defina uma senha segura para acessar sua conta nas próximas vezes.
+          Bem-vindo(a)! Por segurança, defina agora uma senha só sua para continuar acessando o Passe de Batalha.
         </p>
 
         <form onSubmit={handleSubmit} className="w-full flex flex-col gap-4 items-center">
