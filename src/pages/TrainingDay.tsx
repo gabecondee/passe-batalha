@@ -314,7 +314,7 @@ export default function TrainingDay() {
     (s, e) => s + e.sets.filter((x) => x.done).length,
     0,
   );
-  const progress = totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
+  const progress = completedToday ? 100 : totalSets > 0 ? Math.round((doneSets / totalSets) * 100) : 0;
   const allComplete = totalSets > 0 && doneSets === totalSets;
   const locked = !started;
 
