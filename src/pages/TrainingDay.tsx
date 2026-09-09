@@ -192,8 +192,7 @@ export default function TrainingDay() {
   };
 
   useEffect(() => {
-    const dayExercises = allExercises.filter(e => e.day_of_week === day);
-    if (!day || dayExercises.length === 0) return;
+    if (!day) return;
 
     let cancelled = false;
 
