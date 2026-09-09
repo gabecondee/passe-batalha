@@ -338,6 +338,11 @@ export default function Dashboard() {
                           <Dumbbell className="w-3.5 h-3.5 text-primary shrink-0" />
                         )}
                         <p className="text-sm truncate font-medium">{evt.name}</p>
+                        {evt.source === 'training' && evt.trainingStatus === 'in-progress' && (
+                          <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-amber-300">
+                            Em andamento
+                          </span>
+                        )}
                       </div>
                       {evt.time && <p className="text-[10px] text-muted-foreground">{evt.time}</p>}
                     </div>
@@ -349,7 +354,7 @@ export default function Dashboard() {
                       onClick={() => navigate(`/training/${evt.sourceId}`)}
                       className="px-3 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/40 text-primary font-display text-xs uppercase tracking-wider shrink-0 transition"
                     >
-                      Iniciar
+                      {evt.trainingStatus === 'in-progress' ? 'Continuar' : 'Iniciar'}
                     </button>
                   )}
                 </div>

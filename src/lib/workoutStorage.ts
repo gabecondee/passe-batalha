@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { emit } from '@/lib/eventBus';
+import { toISODate } from '@/lib/missionRewards';
 
 export type MuscleId = 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms' | 'trapezius' | 'abs' | 'glutes' | 'quads' | 'hamstrings' | 'adductors' | 'abductors' | 'calves' | 'cardio' | 'full_body';
 
@@ -32,9 +33,98 @@ export interface DayWorkout {
   exercises: Exercise[];
 }
 
+export type WorkoutStatus = 'in-progress' | 'success' | 'early-end';
+
+export interface TrainingPlanData {
+  id?: string;
+  days: string[];
+  age?: number | null;
+  height?: number | null;
+  weight?: number | null;
+  time?: string | null;
+}
+
+interface ExerciseDraftInput {
+  name: string;
+  sets: number;
+  reps: number;
+  weight: number;
+}
+
+export interface WorkoutLogDetails {
+  day: string;
+  muscles: MuscleId[];
+  started_at: string | null;
+  finished_at?: string | null;
+  duration_min: number;
+  status: WorkoutStatus;
+  summary: {
+    exercises_done: number;
+    exercises_total: number;
+    sets_done: number;
+    sets_total: number;
+  };
+  exercises: Array<{
+    exercise_id: string;
+    name: string;
+    sets: Array<{
+      index: number;
+      reps: number;
+      weight: number;
+      done?: boolean;
+    }>;
+  }>;
+}
+
+export interface ActiveWorkoutLog {
+  id: string;
+  status: WorkoutStatus;
+  created_at?: string | null;
+  details: WorkoutLogDetails;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function buildSetDetails(count: number, reps: number, weight: number): ExerciseSet[] {
+  return Array.from({ length: Math.max(0, count || 0) }, () => ({
+    reps: Number(reps) || 0,
+    weight: Number(weight) || 0,
+    done: false,
+  }));
+}
+
+function normalizeSetDetails(details: unknown, count: number, reps: number, weight: number): ExerciseSet[] {
+  if (Array.isArray(details) && details.length > 0) {
+    return details.map((set) => {
+      const detail = isRecord(set) ? set : {};
+      return {
+      reps: Number(detail.reps) || 0,
+      weight: Number(detail.weight ?? detail.weight_kg) || 0,
+      done: false,
+      };
+    });
+  }
+
+  return buildSetDetails(count, reps, weight);
+}
+
+function serializeSetDetails(sets: ExerciseSet[]) {
+  return sets.map((set, index) => ({
+    index: index + 1,
+    reps: Number(set.reps) || 0,
+    weight: Number(set.weight) || 0,
+  }));
+}
+
+function isWorkoutLogDetails(value: unknown): value is WorkoutLogDetails {
+  return isRecord(value) && typeof value.day === 'string' && Array.isArray(value.exercises);
+}
+
 export function useTraining() {
   const { user } = useAuth();
-  const [plan, setPlan] = useState<any | null>(null);
+  const [plan, setPlan] = useState<TrainingPlanData | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [dayMuscles, setDayMuscles] = useState<Record<string, MuscleId[]>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -75,7 +165,7 @@ export function useTraining() {
       setExercises(eData.map(e => ({
         id: e.id,
         name: e.name,
-        sets: Array.from({ length: e.sets || 0 }, () => ({ reps: e.reps || 0, weight: e.weight_kg || 0, done: false })),
+        sets: normalizeSetDetails(e.sets_details, e.sets || 0, e.reps || 0, e.weight_kg || 0),
         day_of_week: e.day_of_week
       })));
     }
@@ -101,7 +191,7 @@ export function useTraining() {
     fetchAll();
   }, [fetchAll]);
 
-  const savePlan = async (p: any) => {
+  const savePlan = async (p: TrainingPlanData) => {
     if (!user) return;
     if (plan?.id) {
       await supabase.from('training_plans').update({
@@ -139,20 +229,22 @@ export function useTraining() {
     await fetchAll();
   };
 
-  const addExercise = async (day: string, draft: any) => {
+  const addExercise = async (day: string, draft: ExerciseDraftInput) => {
     if (!user) return;
+    const setDetails = buildSetDetails(draft.sets, draft.reps, draft.weight);
     await supabase.from('exercises').insert({
       user_id: user.id,
       day_of_week: day,
       name: draft.name,
       sets: draft.sets,
       reps: draft.reps,
-      weight_kg: draft.weight
+      weight_kg: draft.weight,
+      sets_details: serializeSetDetails(setDetails)
     });
     await fetchAll();
   };
 
-  const updateExercise = async (id: string, updated: any) => {
+  const updateExercise = async (id: string, updated: Exercise) => {
     if (!user) return;
     // updated has the shape of Exercise interface, we extract sets length etc
     const numSets = updated.sets.length;
@@ -163,7 +255,8 @@ export function useTraining() {
       name: updated.name,
       sets: numSets,
       reps: reps,
-      weight_kg: weight
+      weight_kg: weight,
+      sets_details: serializeSetDetails(updated.sets)
     }).eq('id', id);
     await fetchAll();
   };
@@ -174,19 +267,122 @@ export function useTraining() {
     await fetchAll();
   };
 
-  const logWorkout = async (status: 'success' | 'early-end', day: string) => {
+  const getActiveWorkout = useCallback(async (day: string): Promise<ActiveWorkoutLog | null> => {
+    if (!user) return null;
+    const today = toISODate(new Date());
+    const { data } = await supabase
+      .from('workout_logs')
+      .select('id, status, created_at, details')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .eq('status', 'in-progress')
+      .order('created_at', { ascending: false });
+
+    const active = data?.find((row) => isWorkoutLogDetails(row.details) && row.details.day === day);
+    if (!active || !isWorkoutLogDetails(active.details)) return null;
+
+    return {
+      id: active.id,
+      status: active.status as WorkoutStatus,
+      created_at: active.created_at,
+      details: active.details,
+    };
+  }, [user]);
+
+  const getTodaysWorkout = useCallback(async (day: string): Promise<ActiveWorkoutLog | null> => {
+    if (!user) return null;
+    const today = toISODate(new Date());
+    const { data } = await supabase
+      .from('workout_logs')
+      .select('id, status, created_at, details')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .in('status', ['success', 'in-progress', 'early-end'])
+      .order('created_at', { ascending: false });
+
+    const rows = data?.filter((row) => isWorkoutLogDetails(row.details) && row.details.day === day) ?? [];
+    const selected =
+      rows.find((row) => row.status === 'success') ??
+      rows.find((row) => row.status === 'in-progress') ??
+      rows[0];
+
+    if (!selected || !isWorkoutLogDetails(selected.details)) return null;
+
+    return {
+      id: selected.id,
+      status: selected.status as WorkoutStatus,
+      created_at: selected.created_at,
+      details: selected.details,
+    };
+  }, [user]);
+
+  const startWorkout = useCallback(async (day: string, details: WorkoutLogDetails): Promise<string | null> => {
+    if (!user) return null;
+    const current = await getTodaysWorkout(day);
+    if (current?.status === 'success') return null;
+    const existing = await getActiveWorkout(day);
+    const today = toISODate(new Date());
+
+    if (existing) {
+      await supabase
+        .from('workout_logs')
+        .update({ status: 'in-progress', details })
+        .eq('id', existing.id);
+      emit({ type: 'workout:changed', day, status: 'in-progress' });
+      return existing.id;
+    }
+
+    const { data } = await supabase
+      .from('workout_logs')
+      .insert({
+        user_id: user.id,
+        date: today,
+        status: 'in-progress',
+        details,
+      })
+      .select('id')
+      .maybeSingle();
+
+    emit({ type: 'workout:changed', day, status: 'in-progress' });
+    return data?.id ?? null;
+  }, [getActiveWorkout, getTodaysWorkout, user]);
+
+  const updateActiveWorkout = useCallback(async (id: string, details: WorkoutLogDetails) => {
     if (!user) return;
-    const today = new Date().toISOString().slice(0, 10);
-    await supabase.from('workout_logs').insert({
-      user_id: user.id,
-      date: today,
-      status: status
-    });
+    await supabase
+      .from('workout_logs')
+      .update({ status: 'in-progress', details })
+      .eq('id', id)
+      .eq('user_id', user.id);
+    emit({ type: 'workout:changed', day: details.day, status: 'in-progress' });
+  }, [user]);
+
+  const logWorkout = useCallback(async (status: 'success' | 'early-end', day: string, details?: WorkoutLogDetails, activeLogId?: string | null) => {
+    if (!user) return;
+    const today = toISODate(new Date());
+
+    if (activeLogId) {
+      await supabase.from('workout_logs').update({
+        date: today,
+        status,
+        details: details ?? { day, status }
+      }).eq('id', activeLogId).eq('user_id', user.id);
+    } else {
+      await supabase.from('workout_logs').insert({
+        user_id: user.id,
+        date: today,
+        status: status,
+        details: details ?? { day, status }
+      });
+    }
+
+    emit({ type: 'workout:changed', day, status });
     
-    // Regra inegociável 3: emitir evento workout:completed
-    emit({ type: 'workout:completed', day });
-    window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', day } }));
-  };
+    if (status === 'success') {
+      emit({ type: 'workout:completed', day, total: details?.summary.sets_done ?? 0 });
+      window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', day, total: details?.summary.sets_done ?? 0 } }));
+    }
+  }, [user]);
 
   const saveDayMuscles = async (day: string, muscles: MuscleId[]) => {
     if (!user) return;
@@ -211,6 +407,10 @@ export function useTraining() {
     addExercise,
     updateExercise,
     deleteExercise,
+    getActiveWorkout,
+    getTodaysWorkout,
+    startWorkout,
+    updateActiveWorkout,
     logWorkout,
     saveDayMuscles
   };

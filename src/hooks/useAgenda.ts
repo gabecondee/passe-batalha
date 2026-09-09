@@ -24,6 +24,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 const GOOGLE_SESSION_KEY = 'google_calendar_session_v1';
 import { useTraining } from '@/lib/workoutStorage';
+import { useBusEvent } from '@/lib/eventBus';
+import { toISODate } from '@/lib/missionRewards';
 
 // Mission WeekDay → JS day index (0=Sun..6=Sat)
 const WEEKDAY_TO_INDEX: Record<WeekDay, number> = {
@@ -37,6 +39,10 @@ const TRAINING_KEY_TO_INDEX: Record<string, number> = {
 const TRAINING_DAY_LABEL: Record<string, string> = {
   D: 'Domingo', S1: 'Segunda', T: 'Terça', Q1: 'Quarta',
   Q2: 'Quinta', S2: 'Sexta', S3: 'Sábado',
+};
+
+const TRAINING_INDEX_TO_KEY: Record<number, string> = {
+  0: 'D', 1: 'S1', 2: 'T', 3: 'Q1', 4: 'Q2', 5: 'S2', 6: 'S3',
 };
 
 // Remove loadEvents and saveEvents
@@ -63,13 +69,51 @@ interface CreateInput {
   syncWithGoogle?: boolean;
 }
 
+type TrainingAgendaStatus = 'in-progress' | 'success' | 'early-end';
+
+interface TrainingAgendaLog {
+  id: string;
+  status: TrainingAgendaStatus;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+function parseTrainingEventId(id: string): { day: string; date: string } | null {
+  const match = /^training-(.+)-(\d{4}-\d{2}-\d{2})$/.exec(id);
+  if (!match) return null;
+  return { day: match[1], date: match[2] };
+}
+
+function normalizeSource(source: string | null | undefined): AgendaSource {
+  return source === 'mission' || source === 'training' || source === 'google' ? source : 'manual';
+}
+
+function trainingStatusPriority(status: TrainingAgendaStatus): number {
+  if (status === 'success') return 3;
+  if (status === 'in-progress') return 2;
+  return 1;
+}
+
+function isTrainingAgendaStatus(status: unknown): status is TrainingAgendaStatus {
+  return status === 'in-progress' || status === 'success' || status === 'early-end';
+}
+
+function trainingDayFromDate(date: string | null | undefined): string | null {
+  if (!date) return null;
+  const parsed = new Date(`${date.slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return TRAINING_INDEX_TO_KEY[parsed.getDay()] ?? null;
+}
+
 export function useAgenda() {
   const { user } = useAuth();
   const { missions } = useGame();
   const { plan: trainingPlan } = useTraining();
   
   const [manualEvents, setManualEvents] = useState<AgendaEvent[]>([]);
-  const [trainingDone, setTrainingDone] = useState<Record<string, string[]>>({});
+  const [trainingLogs, setTrainingLogs] = useState<Record<string, TrainingAgendaLog>>({});
   
   const [googleSession, setGoogleSession] = useState<GoogleSession | null>(loadGoogleSession);
   const [googleEvents, setGoogleEvents] = useState<AgendaEvent[]>([]);
@@ -86,8 +130,9 @@ export function useAgenda() {
     if (data && data.length > 0) {
       const map: Record<string, AgendaCategoryMeta> = { ...AGENDA_CATEGORIES };
       data.forEach(c => {
+        const category = normalizeCategory(c.key);
         map[c.key] = {
-          id: c.key as any,
+          id: category,
           label: c.label,
           icon: c.icon || '📄',
           color: c.color || 'text-cyan-400 border-cyan-400/50',
@@ -118,7 +163,7 @@ export function useAgenda() {
         time: d.event_time ? d.event_time.slice(0, 5) : undefined,
         description: d.description || undefined,
         recurrence: (d.recurrence || 'none') as AgendaRecurrence,
-        source: (d.source || 'manual') as any,
+        source: normalizeSource(d.source),
         completed: d.status === 'done',
         createdAt: d.created_at || new Date().toISOString()
       })));
@@ -128,6 +173,56 @@ export function useAgenda() {
   useEffect(() => {
     fetchManualEvents();
   }, [fetchManualEvents]);
+
+  const fetchTrainingLogs = useCallback(async () => {
+    if (!user) return;
+    const today = toISODate(new Date());
+    const { data } = await supabase
+      .from('workout_logs')
+      .select('id, status, date, details, created_at')
+      .eq('user_id', user.id)
+      .eq('date', today)
+      .in('status', ['in-progress', 'success', 'early-end'])
+      .order('created_at', { ascending: false });
+
+    const map: Record<string, TrainingAgendaLog> = {};
+    data?.forEach((row) => {
+      const details = isRecord(row.details) ? row.details : {};
+      const day = typeof details.day === 'string' ? details.day : trainingDayFromDate(row.date);
+      const status = row.status;
+      if (!day || !isTrainingAgendaStatus(status)) return;
+      if (!map[day] || trainingStatusPriority(status) > trainingStatusPriority(map[day].status)) {
+        map[day] = { id: row.id, status };
+      }
+    });
+    setTrainingLogs(map);
+  }, [user]);
+
+  useEffect(() => {
+    fetchTrainingLogs();
+  }, [fetchTrainingLogs]);
+
+  useBusEvent(useCallback((event) => {
+    if (event.type === 'workout:changed' || event.type === 'workout:completed') {
+      fetchTrainingLogs();
+    }
+  }, [fetchTrainingLogs]));
+
+  useEffect(() => {
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') {
+        fetchTrainingLogs();
+      }
+    };
+
+    window.addEventListener('focus', fetchTrainingLogs);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      window.removeEventListener('focus', fetchTrainingLogs);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
+  }, [fetchTrainingLogs]);
 
   useEffect(() => {
     if (googleSession) {
@@ -160,7 +255,7 @@ export function useAgenda() {
     } else {
       setGoogleEvents([]);
     }
-  }, [googleSession, syncGoogleEvents]);
+  }, [googleSession, syncGoogleEvents, user]);
 
   const connectGoogleCalendar = useCallback(async () => {
     setGoogleError(null);
@@ -241,17 +336,64 @@ export function useAgenda() {
     if (googleCalendarId) {
       syncGoogleEvents();
     }
-  }, [googleSession, syncGoogleEvents]);
+  }, [googleSession, syncGoogleEvents, user]);
 
   const toggleComplete = useCallback(async (id: string) => {
-    // Training events are ephemeral (derived) — mark them done for today only.
+    // Training events are derived from the training plan, but their execution
+    // state is persisted in workout_logs so Dashboard/Agenda stay in sync.
     if (id.startsWith('training-')) {
-      const today = new Date().toISOString().slice(0, 10);
-      setTrainingDone(prev => {
-        const doneToday = new Set(prev[today] ?? []);
-        if (doneToday.has(id)) doneToday.delete(id); else doneToday.add(id);
-        return { ...prev, [today]: Array.from(doneToday) };
-      });
+      if (!user) return;
+      const parsed = parseTrainingEventId(id);
+      if (!parsed) return;
+
+      const current = trainingLogs[parsed.day];
+      if (current?.status === 'success') return;
+      const nextStatus: TrainingAgendaStatus = current?.status === 'success' ? 'early-end' : 'success';
+      const details = {
+        day: parsed.day,
+        status: nextStatus,
+        source: 'agenda',
+        muscles: [],
+        started_at: null,
+        finished_at: nextStatus === 'success' ? new Date().toISOString() : null,
+        duration_min: 0,
+        summary: {
+          exercises_done: 0,
+          exercises_total: 0,
+          sets_done: 0,
+          sets_total: 0,
+        },
+        exercises: [],
+      };
+
+      if (current) {
+        await supabase
+          .from('workout_logs')
+          .update({ status: nextStatus, details })
+          .eq('id', current.id)
+          .eq('user_id', user.id);
+      } else {
+        const { data } = await supabase
+          .from('workout_logs')
+          .insert({
+            user_id: user.id,
+            date: parsed.date,
+            status: nextStatus,
+            details,
+          })
+          .select('id')
+          .maybeSingle();
+
+        if (data?.id) {
+          setTrainingLogs(prev => ({ ...prev, [parsed.day]: { id: data.id, status: nextStatus } }));
+          return;
+        }
+      }
+
+      setTrainingLogs(prev => ({
+        ...prev,
+        [parsed.day]: { id: current?.id ?? id, status: nextStatus },
+      }));
       return;
     }
 
@@ -271,7 +413,7 @@ export function useAgenda() {
     // Update DB
     await supabase.from('agenda_events').update({ status: newStatus }).eq('id', id);
     
-  }, [manualEvents, user]);
+  }, [manualEvents, trainingLogs, user]);
 
   const updateEvent = useCallback(async (id: string, data: Partial<CreateInput>) => {
     if (!user) return;
@@ -294,7 +436,14 @@ export function useAgenda() {
     );
     
     // DB Update
-    const patch: any = {};
+    const patch: Partial<{
+      title: string;
+      category: AgendaCategory;
+      event_date: string;
+      event_time: string | null;
+      description: string | null;
+      recurrence: AgendaRecurrence;
+    }> = {};
     if ('name' in data) patch.title = data.name!.trim();
     if ('category' in data) patch.category = data.category;
     if ('date' in data) patch.event_date = data.date;
@@ -366,19 +515,23 @@ export function useAgenda() {
   }, [trainingPlan]);
 
   const allEvents = useMemo<AgendaEvent[]>(() => {
+    const today = toISODate(new Date());
     const syncedIds = new Set(
       manualEvents.map((e) => e.googleCalendarId).filter(Boolean) as string[],
     );
     const uniqueGoogle = googleEvents.filter(
       (g) => !g.googleCalendarId || !syncedIds.has(g.googleCalendarId),
     );
-    // Mark training events as completed based on per-day dismissal storage.
-    const doneToday = new Set(trainingDone[new Date().toISOString().slice(0, 10)] ?? []);
-    const trainings = derivedTrainingEvents.map(t =>
-      doneToday.has(t.id) ? { ...t, completed: true } : t,
-    );
+    const trainings = derivedTrainingEvents.map(t => {
+      const status = t.date === today && t.sourceId ? trainingLogs[t.sourceId]?.status : undefined;
+      return {
+        ...t,
+        completed: status === 'success',
+        trainingStatus: status,
+      };
+    });
     return [...manualEvents, ...uniqueGoogle, ...derivedMissionEvents, ...trainings];
-  }, [manualEvents, googleEvents, derivedMissionEvents, derivedTrainingEvents, trainingDone]);
+  }, [manualEvents, googleEvents, derivedMissionEvents, derivedTrainingEvents, trainingLogs]);
 
   const parseLocalDate = (dateStr: string): Date => {
     if (!dateStr) return new Date();

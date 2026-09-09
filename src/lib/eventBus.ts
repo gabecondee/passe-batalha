@@ -13,6 +13,7 @@ export type BusEvent =
   | { type: 'journal:entry-added'; count: number }
   | { type: 'journal:entry-deleted'; count: number }
   | { type: 'meal:logged'; date: string }
+  | { type: 'workout:changed'; day: string; status: string }
   | { type: 'workout:completed'; day: string; total: number }
   | { type: 'finance:changed'; balance: number }
   | { type: 'agenda:event-completed'; eventId: string }

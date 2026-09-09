@@ -29,6 +29,7 @@ export interface AgendaEvent {
   /** Direct link to the event on calendar.google.com */
   googleCalendarLink?: string;
   completed?: boolean;
+  trainingStatus?: 'in-progress' | 'success' | 'early-end';
   createdAt: string;
 }
 
