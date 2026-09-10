@@ -1,27 +1,43 @@
-import { useRef } from 'react';
+import { useId, useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { CharacterCard } from '@/components/dashboard/CharacterCard';
 import { AttributeRadar } from '@/components/dashboard/AttributeRadar';
 import { useGame } from '@/contexts/GameContext';
-import { Calendar, Target, Star, Camera, Cake, Scale, Ruler, User as UserIcon } from 'lucide-react';
+import { Calendar, Target, Star, Camera, Cake, Scale, Ruler, User as UserIcon, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { compressProfileImage } from '@/lib/profileImage';
+import { cn } from '@/lib/utils';
 
 export default function Profile() {
   const { user, updateAvatar, attributes, missions, skills } = useGame();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileInputId = useId();
+  const [compressing, setCompressing] = useState(false);
 
   const completedMissions = missions.filter(m => m.status === 'completed').length;
   const unlockedSkills = skills.filter(s => s.unlocked).length;
 
-  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
     if (!file.type.startsWith('image/')) {
       toast.error('Selecione um arquivo de imagem');
       return;
     }
-    const url = URL.createObjectURL(file);
-    updateAvatar(url);
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo 10MB.');
+      return;
+    }
+
+    setCompressing(true);
+    try {
+      const compressed = await compressProfileImage(file);
+      updateAvatar(compressed);
+    } catch {
+      toast.error('Erro ao processar a imagem. Tente outra.');
+    } finally {
+      setCompressing(false);
+    }
   };
 
   function calculateAge(birthDateStr?: string) {
@@ -69,19 +85,24 @@ export default function Profile() {
         {/* Character Card with Upload */}
         <div className="relative">
           <CharacterCard user={user} />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute bottom-2 right-2 md:bottom-4 md:right-4 z-20 flex items-center gap-1.5 md:gap-2 px-3 py-1.5 md:px-4 md:py-2 rounded-lg bg-primary/20 border border-primary/40 text-primary text-xs md:text-sm font-display hover:bg-primary/30 transition-colors backdrop-blur-sm"
+          <label
+            htmlFor={fileInputId}
+            aria-disabled={compressing}
+            className={cn(
+              'absolute bottom-2 right-2 z-20 flex cursor-pointer items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/20 px-3 py-1.5 font-display text-xs text-primary backdrop-blur-sm transition-colors hover:bg-primary/30 md:bottom-4 md:right-4 md:gap-2 md:px-4 md:py-2 md:text-sm',
+              compressing && 'pointer-events-none cursor-not-allowed opacity-60',
+            )}
           >
-            <Camera className="w-4 h-4" />
-            Alterar Foto
-          </button>
+            {compressing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+            {compressing ? 'Comprimindo...' : 'Alterar Foto'}
+          </label>
           <input
-            ref={fileInputRef}
+            id={fileInputId}
             type="file"
             accept="image/*"
             onChange={handlePhotoUpload}
-            className="hidden"
+            className="sr-only"
+            disabled={compressing}
           />
         </div>
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import { User, Camera, Trash2, Save, Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -14,6 +14,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { compressProfileImage } from '@/lib/profileImage';
 
 const CLASSES: { value: string; label: string }[] = [
   { value: 'warrior', label: 'Guerreiro' },
@@ -26,7 +27,7 @@ const CLASSES: { value: string; label: string }[] = [
 
 export default function ProfileSettings() {
   const { user, updateAvatar, refreshProfile } = useGame();
-  const fileRef = useRef<HTMLInputElement>(null);
+  const fileInputId = useId();
 
   const [name, setName] = useState<string>('');
   const [klass, setKlass] = useState<string>('warrior');
@@ -80,30 +81,6 @@ export default function ProfileSettings() {
     }
   }, [birthDate]);
 
-  /** Comprime a imagem para no máximo 800×800px, JPEG 80% de qualidade */
-  const compressImage = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const img = new Image();
-      const objectUrl = URL.createObjectURL(file);
-      img.onload = () => {
-        URL.revokeObjectURL(objectUrl);
-        const MAX = 800;
-        let { width, height } = img;
-        if (width > MAX || height > MAX) {
-          if (width > height) { height = Math.round((height * MAX) / width); width = MAX; }
-          else { width = Math.round((width * MAX) / height); height = MAX; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d')!;
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.8));
-      };
-      img.onerror = reject;
-      img.src = objectUrl;
-    });
-
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     // Reset o valor para permitir selecionar o mesmo arquivo novamente
@@ -114,7 +91,7 @@ export default function ProfileSettings() {
 
     setCompressing(true);
     try {
-      const compressed = await compressImage(file);
+      const compressed = await compressProfileImage(file);
       updateAvatar(compressed);
       toast.success('Foto atualizada! Clique em Salvar para confirmar.');
     } catch {
@@ -183,22 +160,25 @@ export default function ProfileSettings() {
             <img src={user.avatar} alt={user.name} className="w-28 h-28 rounded-full object-cover border-2 border-primary/60 shadow-[0_0_20px_hsl(var(--primary)/0.5)]" />
           </div>
           <div className="flex flex-wrap gap-2 justify-center">
-            <button
-              onClick={() => fileRef.current?.click()}
-              disabled={compressing}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-primary/50 text-primary text-xs font-display hover:bg-primary/10 disabled:opacity-60 disabled:cursor-not-allowed"
+            <label
+              htmlFor={fileInputId}
+              aria-disabled={compressing}
+              className={cn(
+                'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-primary/50 px-3 py-1.5 font-display text-xs text-primary hover:bg-primary/10',
+                compressing && 'pointer-events-none cursor-not-allowed opacity-60',
+              )}
             >
               {compressing ? (
                 <><Loader2 className="w-4 h-4 animate-spin" /> Comprimindo...</>
               ) : (
                 <><Camera className="w-4 h-4" /> Alterar Foto</>
               )}
-            </button>
+            </label>
             <button onClick={removePhoto} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-display hover:bg-destructive/10">
               <Trash2 className="w-4 h-4" /> Remover
             </button>
           </div>
-          <input ref={fileRef} type="file" accept="image/*" onChange={onFile} className="hidden" />
+          <input id={fileInputId} type="file" accept="image/*" onChange={onFile} className="sr-only" disabled={compressing} />
         </div>
 
         {/* Fields card */}
