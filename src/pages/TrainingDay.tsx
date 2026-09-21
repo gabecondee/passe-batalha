@@ -1,7 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Plus, Pencil, Dumbbell, Play, Square, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Plus, Pencil, Dumbbell, Play, Square, CheckCircle2, Clock, History, ChevronDown } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { MuscleSelectorDialog } from '@/components/training/MuscleSelectorDialog';
@@ -18,6 +20,7 @@ import {
   MuscleId,
   MUSCLES,
   WorkoutLogDetails,
+  WorkoutHistoryLog,
   WorkoutStatus,
 } from '@/lib/workoutStorage';
 
@@ -44,6 +47,7 @@ export default function TrainingDay() {
     updateExercise,
     deleteExercise,
     getTodaysWorkout,
+    getWorkoutHistory,
     startWorkout,
     updateActiveWorkout,
     logWorkout,
@@ -55,6 +59,9 @@ export default function TrainingDay() {
   const [started, setStarted] = useState(false);
   const [completedToday, setCompletedToday] = useState(false);
   const [completedWorkoutDetails, setCompletedWorkoutDetails] = useState<WorkoutLogDetails | null>(null);
+  const [historyLogs, setHistoryLogs] = useState<WorkoutHistoryLog[]>([]);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [activeWorkoutId, setActiveWorkoutId] = useState<string | null>(null);
   const activeWorkoutIdRef = useRef<string | null>(null);
   const workoutRef = useRef<DayWorkout>({ muscles: [], exercises: [] });
@@ -98,6 +105,9 @@ export default function TrainingDay() {
     setStarted(false);
     setCompletedToday(false);
     setCompletedWorkoutDetails(null);
+    setHistoryLogs([]);
+    setSelectedHistoryId(null);
+    setHistoryExpanded(false);
     setActiveWorkoutId(null);
     startedAtRef.current = null;
   }, [day]);
@@ -197,7 +207,14 @@ export default function TrainingDay() {
     let cancelled = false;
 
     const restoreTodaysWorkout = async () => {
-      const todayLog = await getTodaysWorkout(day);
+      const [todayLog, history] = await Promise.all([
+        getTodaysWorkout(day),
+        getWorkoutHistory(day),
+      ]);
+      if (!cancelled) {
+        setHistoryLogs(history);
+        setSelectedHistoryId((current) => current ?? history[0]?.id ?? null);
+      }
       if (cancelled || !todayLog) return;
 
       if (todayLog.status === 'success') {
@@ -224,7 +241,7 @@ export default function TrainingDay() {
     return () => {
       cancelled = true;
     };
-  }, [allExercises, day, getTodaysWorkout]);
+  }, [allExercises, day, getTodaysWorkout, getWorkoutHistory]);
 
   const finishWorkout = async (variant: 'success' | 'early-end') => {
     const details = buildWorkoutDetails(variant);
@@ -244,6 +261,10 @@ export default function TrainingDay() {
     if (variant === 'success') {
       setCompletedToday(true);
       setCompletedWorkoutDetails(details);
+      getWorkoutHistory(day).then((history) => {
+        setHistoryLogs(history);
+        setSelectedHistoryId(activeWorkoutIdRef.current ?? history[0]?.id ?? null);
+      });
     }
     setActiveWorkoutId(null);
     startedAtRef.current = null;
@@ -307,6 +328,10 @@ export default function TrainingDay() {
   const selectedMuscles = useMemo(
     () => MUSCLES.filter((m) => workout.muscles.includes(m.id)),
     [workout.muscles],
+  );
+  const selectedHistoryLog = useMemo(
+    () => historyLogs.find((log) => log.id === selectedHistoryId) ?? historyLogs[0] ?? null,
+    [historyLogs, selectedHistoryId],
   );
 
   const totalSets = workout.exercises.reduce((s, e) => s + e.sets.length, 0);
@@ -414,9 +439,15 @@ export default function TrainingDay() {
           </div>
         </div>
 
-        {completedToday && completedWorkoutDetails && (
-          <CompletedWorkoutSummary details={completedWorkoutDetails} />
-        )}
+        <WorkoutHistorySection
+          dayLabel={DAY_LABELS[day] || day}
+          logs={historyLogs}
+          selectedLog={selectedHistoryLog}
+          selectedId={selectedHistoryId}
+          expanded={historyExpanded}
+          onExpandedChange={setHistoryExpanded}
+          onSelect={setSelectedHistoryId}
+        />
 
         {/* Iniciar / Encerrar Treino */}
         <Button
@@ -530,28 +561,166 @@ export default function TrainingDay() {
   );
 }
 
-function CompletedWorkoutSummary({ details }: { details: WorkoutLogDetails }) {
+function formatHistoryDate(date: string | null | undefined) {
+  if (!date) return 'Data não registrada';
+
+  try {
+    return format(parseISO(`${date.slice(0, 10)}T00:00:00`), "EEEE, dd/MM/yyyy", { locale: ptBR });
+  } catch {
+    return date;
+  }
+}
+
+function formatShortHistoryDate(date: string | null | undefined) {
+  if (!date) return '--/--';
+
+  try {
+    return format(parseISO(`${date.slice(0, 10)}T00:00:00`), 'dd/MM', { locale: ptBR });
+  } catch {
+    return date.slice(0, 5);
+  }
+}
+
+function WorkoutHistorySection({
+  dayLabel,
+  logs,
+  selectedLog,
+  selectedId,
+  expanded,
+  onExpandedChange,
+  onSelect,
+}: {
+  dayLabel: string;
+  logs: WorkoutHistoryLog[];
+  selectedLog: WorkoutHistoryLog | null;
+  selectedId: string | null;
+  expanded: boolean;
+  onExpandedChange: (expanded: boolean) => void;
+  onSelect: (id: string) => void;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-3xl border border-border/40 bg-card/40 p-4 md:p-5 space-y-4"
+    >
+      <button
+        type="button"
+        onClick={() => onExpandedChange(!expanded)}
+        className="flex w-full items-start justify-between gap-3 text-left"
+        aria-expanded={expanded}
+      >
+        <div>
+          <h2 className="font-display text-sm uppercase tracking-[0.25em] text-primary">
+            Histórico de {dayLabel}
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {logs.length > 0
+              ? `${logs.length} treino${logs.length === 1 ? '' : 's'} registrado${logs.length === 1 ? '' : 's'} neste dia.`
+              : 'Nenhum treino registrado neste dia.'}
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-primary">
+          <History className="h-5 w-5 shrink-0" />
+          <ChevronDown
+            className={cn(
+              'h-5 w-5 shrink-0 transition-transform',
+              expanded && 'rotate-180',
+            )}
+          />
+        </div>
+      </button>
+
+      {expanded && (
+        logs.length === 0 || !selectedLog ? (
+          <div className="rounded-2xl border border-dashed border-border/60 bg-background/30 px-4 py-8 text-center">
+            <Dumbbell className="mx-auto mb-3 h-9 w-9 text-muted-foreground/50" />
+            <p className="font-display text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Nenhum treino registrado
+            </p>
+            <p className="mx-auto mt-2 max-w-sm text-xs text-muted-foreground/80">
+              Quando você finalizar um treino, ele aparecerá aqui com as séries, repetições e cargas executadas.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+              {logs.map((log) => {
+                const isSelected = (selectedId ?? selectedLog.id) === log.id;
+                return (
+                  <button
+                    key={log.id}
+                    type="button"
+                    onClick={() => onSelect(log.id)}
+                    className={cn(
+                      'shrink-0 rounded-xl border px-3 py-2 text-left transition',
+                      isSelected
+                        ? 'border-primary/70 bg-primary/15 text-primary shadow-[0_0_14px_hsl(var(--primary)/0.25)]'
+                        : 'border-border/50 bg-background/35 text-muted-foreground hover:border-primary/40 hover:text-primary',
+                    )}
+                  >
+                    <span className="block font-display text-xs uppercase tracking-wider">
+                      {formatShortHistoryDate(log.date)}
+                    </span>
+                    <span className="mt-0.5 block text-[10px] uppercase tracking-wider">
+                      {log.status === 'success' ? 'Concluído' : 'Encerrado'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <CompletedWorkoutSummary
+              details={selectedLog.details}
+              title={formatHistoryDate(selectedLog.date)}
+              description={selectedLog.status === 'success' ? 'Treino concluído e salvo no histórico.' : 'Treino encerrado antes de concluir todas as séries.'}
+              tone={selectedLog.status === 'success' ? 'success' : 'warning'}
+            />
+          </>
+        )
+      )}
+    </motion.section>
+  );
+}
+
+function CompletedWorkoutSummary({
+  details,
+  title = 'Treino Realizado Hoje',
+  description = 'Resultado salvo no histórico deste treino.',
+  tone = 'success',
+}: {
+  details: WorkoutLogDetails;
+  title?: string;
+  description?: string;
+  tone?: 'success' | 'warning';
+}) {
   const exercisesDone = details.summary?.exercises_done ?? details.exercises.length;
   const exercisesTotal = details.summary?.exercises_total ?? details.exercises.length;
   const setsDone = details.summary?.sets_done ?? details.exercises.reduce((sum, exercise) => sum + exercise.sets.length, 0);
   const setsTotal = details.summary?.sets_total ?? setsDone;
+  const isWarning = tone === 'warning';
 
   return (
     <motion.section
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-3xl border border-emerald-500/40 bg-emerald-500/5 p-4 md:p-5 space-y-4 shadow-[0_0_22px_hsl(142_76%_36%/0.16)]"
+      className={cn(
+        'rounded-3xl border p-4 md:p-5 space-y-4',
+        isWarning
+          ? 'border-amber-500/40 bg-amber-500/5 shadow-[0_0_22px_hsl(38_92%_50%/0.14)]'
+          : 'border-emerald-500/40 bg-emerald-500/5 shadow-[0_0_22px_hsl(142_76%_36%/0.16)]',
+      )}
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-sm uppercase tracking-[0.25em] text-emerald-400">
-            Treino Realizado Hoje
+          <h2 className={cn('font-display text-sm uppercase tracking-[0.25em]', isWarning ? 'text-amber-400' : 'text-emerald-400')}>
+            {title}
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Resultado salvo no histórico deste treino.
+            {description}
           </p>
         </div>
-        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-400" />
+        <CheckCircle2 className={cn('h-5 w-5 shrink-0', isWarning ? 'text-amber-400' : 'text-emerald-400')} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">

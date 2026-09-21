@@ -83,6 +83,10 @@ export interface ActiveWorkoutLog {
   details: WorkoutLogDetails;
 }
 
+export interface WorkoutHistoryLog extends ActiveWorkoutLog {
+  date: string | null;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -316,6 +320,30 @@ export function useTraining() {
     };
   }, [user]);
 
+  const getWorkoutHistory = useCallback(async (day: string): Promise<WorkoutHistoryLog[]> => {
+    if (!user) return [];
+
+    const { data } = await supabase
+      .from('workout_logs')
+      .select('id, date, status, created_at, details')
+      .eq('user_id', user.id)
+      .in('status', ['success', 'early-end'])
+      .contains('details', { day })
+      .order('date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    return (data ?? [])
+      .filter((row) => isWorkoutLogDetails(row.details) && row.details.day === day)
+      .map((row) => ({
+        id: row.id,
+        date: row.date,
+        status: row.status as WorkoutStatus,
+        created_at: row.created_at,
+        details: row.details as WorkoutLogDetails,
+      }));
+  }, [user]);
+
   const startWorkout = useCallback(async (day: string, details: WorkoutLogDetails): Promise<string | null> => {
     if (!user) return null;
     const current = await getTodaysWorkout(day);
@@ -409,6 +437,7 @@ export function useTraining() {
     deleteExercise,
     getActiveWorkout,
     getTodaysWorkout,
+    getWorkoutHistory,
     startWorkout,
     updateActiveWorkout,
     logWorkout,
