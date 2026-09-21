@@ -24,10 +24,12 @@ const sections = [
     title: '3. Integração com Google Agenda',
     icon: CalendarDays,
     body: [
-      'Se você conectar sua conta Google, o Passe de Batalha poderá acessar eventos do Google Agenda conforme as permissões autorizadas por você.',
-      'A integração é usada para listar eventos, exibir compromissos dentro do app e criar eventos no seu calendário quando você solicitar a sincronização.',
+      'Se você conectar sua conta Google, o Passe de Batalha poderá acessar dados do Google Agenda conforme as permissões autorizadas por você na tela de consentimento do Google.',
+      'A integração é usada exclusivamente para listar eventos do seu calendário principal, exibir compromissos dentro do app e criar eventos no seu calendário quando você solicitar a sincronização.',
+      'Os dados acessados podem incluir título do evento, descrição, data, horário, recorrência, identificador do evento e link do evento no Google Agenda.',
+      'O Passe de Batalha pode armazenar identificadores e links de eventos sincronizados para evitar duplicidade, exibir o status da sincronização e permitir o gerenciamento dos compromissos vinculados ao app.',
       'Não usamos dados do Google Agenda para publicidade, venda de dados ou compartilhamento com terceiros sem sua autorização.',
-      'Você pode desconectar o Google Agenda nas configurações do app ou revogar o acesso diretamente na sua Conta Google.',
+      'Você pode desconectar o Google Agenda nas configurações do app ou revogar o acesso diretamente na sua Conta Google. Ao revogar o acesso, o app deixa de acessar novos dados do Google Agenda.',
     ],
   },
   {
@@ -44,6 +46,8 @@ const sections = [
     icon: LockKeyhole,
     body: [
       'Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda, alteração ou uso indevido.',
+      'Os dados são armazenados pelo tempo necessário para fornecer as funcionalidades do app, cumprir obrigações legais, resolver problemas técnicos e atender solicitações do usuário.',
+      'Quando você solicitar exclusão de dados, avaliaremos a solicitação conforme a legislação aplicável e poderemos manter apenas registros necessários para cumprimento legal, auditoria, segurança ou defesa de direitos.',
       'Mesmo com esses cuidados, nenhum sistema é completamente imune a falhas. Por isso, recomendamos que você mantenha sua senha protegida e não compartilhe sua conta.',
     ],
   },
