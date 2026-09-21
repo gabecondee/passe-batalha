@@ -13,7 +13,7 @@ import { isNavItemActive } from '@/lib/navModules';
 import { motion, AnimatePresence } from 'framer-motion';
 
 const navItems = [
-  { path: '/', label: 'Home', icon: LayoutDashboard },
+  { path: '/app', label: 'Home', icon: LayoutDashboard },
   { path: '/skills', label: 'Skills', icon: TreeDeciduous },
   { path: '/missions', label: 'Missões', icon: Target },
   { path: '/bosses', label: 'Chefões', icon: Skull },

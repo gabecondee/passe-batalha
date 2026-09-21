@@ -40,13 +40,13 @@ export default function LegalSettings() {
             icon={FileText}
             title="Termos de Uso"
             description="Regras e condições de uso da plataforma."
-            onClick={() => window.open('https://gabrielconde.com.br/termos-de-uso', '_blank', 'noopener,noreferrer')}
+            to="/terms"
           />
           <SettingsCard
             icon={Shield}
             title="Política de Privacidade"
             description="Como tratamos e protegemos seus dados."
-            onClick={() => window.open('https://gabrielconde.com.br/politica-de-privacidade', '_blank', 'noopener,noreferrer')}
+            to="/privacy"
           />
         </div>
       </div>

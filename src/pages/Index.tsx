@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
 import Dashboard from './Dashboard';
 import { OnboardingWizard } from '@/components/onboarding/OnboardingWizard';
 import { SetPassword } from '@/components/auth/SetPassword';
@@ -8,12 +9,17 @@ import { Loader2 } from 'lucide-react';
 import { useGame } from '@/contexts/GameContext';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
-const Index = () => {
+interface IndexProps {
+  initialAuthView?: 'intro' | 'login';
+}
+
+const Index = ({ initialAuthView = 'intro' }: IndexProps) => {
+  const location = useLocation();
   const [loading, setLoading] = useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [hasPasswordSet, setHasPasswordSet] = useState(true);
   const { completeOnboarding } = useGame();
-  const { user, loading: authLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -74,7 +80,11 @@ const Index = () => {
   }
 
   if (!hasCompletedOnboarding) {
-    return <OnboardingWizard onComplete={handleCompleteOnboarding} />;
+    return <OnboardingWizard onComplete={handleCompleteOnboarding} initialAuthView={initialAuthView} />;
+  }
+
+  if (location.pathname === '/login') {
+    return <Navigate to="/app" replace />;
   }
 
   return (

@@ -40,6 +40,7 @@ const SERIF = "'Cormorant Garamond', 'Cinzel', serif";
 
 interface OnboardingWizardProps {
   onComplete: (data: { name: string; avatar: string | null; initialSkills?: Record<string, number>; class?: string }) => void;
+  initialAuthView?: 'intro' | 'login';
 }
 
 type Screen = 'start' | 'meet' | 'name' | 'class' | 'character' | 'skills' | 'summary';
@@ -62,13 +63,13 @@ const SKILL_CARDS = [
   { key: 'financial', title: 'Área Financeira', desc: 'Essa área representa suas dívidas, investimentos e planejamento.' },
 ];
 
-export function OnboardingWizard({ onComplete }: OnboardingWizardProps) {
+export function OnboardingWizard({ onComplete, initialAuthView = 'intro' }: OnboardingWizardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
   
   // Use state with a function to determine initial screen synchronously
   const [screen, setScreen] = useState<Screen>(user ? 'meet' : 'start');
-  const [authView, setAuthView] = useState<'intro' | 'login'>('intro');
+  const [authView, setAuthView] = useState<'intro' | 'login'>(initialAuthView);
   const loginMode = 'returning';
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');

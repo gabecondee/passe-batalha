@@ -2,7 +2,7 @@
 // Used by Sidebar and BottomNav to keep the parent item highlighted while
 // the user navigates through any subscreen of the same module.
 export const NAV_MODULE_PREFIXES: Record<string, string[]> = {
-  '/': ['/'],
+  '/app': ['/app'],
   '/skills': ['/skills'],
   '/missions': ['/missions'],
   '/bosses': ['/bosses'],
@@ -21,7 +21,7 @@ export const NAV_MODULE_PREFIXES: Record<string, string[]> = {
 };
 
 export function isNavItemActive(itemPath: string, pathname: string): boolean {
-  if (itemPath === '/') return pathname === '/';
+  if (itemPath === '/app') return pathname === '/app';
   const prefixes = NAV_MODULE_PREFIXES[itemPath] ?? [itemPath];
   return prefixes.some(
     (p) => pathname === p || pathname.startsWith(p + '/'),

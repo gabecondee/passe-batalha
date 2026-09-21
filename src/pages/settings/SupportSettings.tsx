@@ -6,7 +6,7 @@ import { SettingsCard } from '@/components/settings/SettingsCard';
 const APP_VERSION = '1.0.0';
 
 export default function SupportSettings() {
-  const mail = (subject: string) => `mailto:suporte@passedebatalha.app?subject=${encodeURIComponent(subject)}`;
+  const mail = (subject: string) => `mailto:suporte@gabrielconde.com.br?subject=${encodeURIComponent(subject)}`;
   return (
     <MainLayout>
       <div className="space-y-6 max-w-3xl mx-auto pb-8">
@@ -18,8 +18,8 @@ export default function SupportSettings() {
           <SettingsCard icon={Mail} title="Enviar feedback" description="Compartilhe sua experiência" onClick={() => (window.location.href = mail('Feedback — Passe de Batalha'))} />
           <SettingsCard icon={Bug} title="Reportar bug" description="Encontrou algo errado?" onClick={() => (window.location.href = mail('Bug report — Passe de Batalha'))} />
           <SettingsCard icon={Lightbulb} title="Sugestões" description="Sugira novas funcionalidades" onClick={() => (window.location.href = mail('Sugestão — Passe de Batalha'))} />
-          <SettingsCard icon={Scale} title="Política de privacidade" description="Como tratamos seus dados" onClick={() => window.open('https://gabrielconde.com.br/politica-privacidade', '_blank')} />
-          <SettingsCard icon={FileText} title="Termos de uso" description="Regras da plataforma" onClick={() => window.open('https://gabrielconde.com.br/termos-de-uso', '_blank')} />
+          <SettingsCard icon={Scale} title="Política de privacidade" description="Como tratamos seus dados" to="/privacy" />
+          <SettingsCard icon={FileText} title="Termos de uso" description="Regras da plataforma" to="/terms" />
         </div>
 
         <div className="fantasy-card p-5 flex items-center justify-between">
