@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Política de Privacidade - Passe de Batalha</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #050505;
+        --panel: #0b0b0b;
+        --text: #f8fafc;
+        --muted: #cbd5e1;
+        --soft: #94a3b8;
+        --gold: #fbbf24;
+        --line: rgba(255, 255, 255, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: radial-gradient(circle at 50% 0%, rgba(245, 158, 11, 0.14), transparent 34%), var(--bg);
+        color: var(--text);
+        font-family: Inter, Arial, sans-serif;
+        line-height: 1.7;
+      }
+
+      a {
+        color: var(--gold);
+      }
+
+      .page {
+        width: min(920px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 32px 0;
+      }
+
+      header,
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 24px;
+      }
+
+      footer {
+        border-top: 1px solid var(--line);
+        border-bottom: 0;
+        margin-top: 40px;
+        padding-top: 24px;
+        color: var(--soft);
+        font-size: 14px;
+      }
+
+      .brand {
+        color: var(--gold);
+        font-weight: 800;
+        letter-spacing: 0.2em;
+        text-transform: uppercase;
+        text-decoration: none;
+      }
+
+      .button {
+        background: var(--gold);
+        border-radius: 12px;
+        color: #1a1208;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        padding: 10px 18px;
+        text-decoration: none;
+        text-transform: uppercase;
+      }
+
+      .hero {
+        padding: 56px 0 32px;
+        text-align: center;
+      }
+
+      .eyebrow {
+        color: var(--gold);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        font-size: clamp(36px, 8vw, 56px);
+        letter-spacing: 0.08em;
+        line-height: 1.1;
+        margin: 16px 0;
+        text-transform: uppercase;
+      }
+
+      h2 {
+        font-size: 18px;
+        letter-spacing: 0.12em;
+        margin: 0 0 16px;
+        text-transform: uppercase;
+      }
+
+      p {
+        color: var(--muted);
+        margin: 0 0 14px;
+      }
+
+      .updated {
+        color: var(--soft);
+        font-size: 12px;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      section {
+        background: rgba(255, 255, 255, 0.035);
+        border: 1px solid var(--line);
+        margin-top: 16px;
+        padding: 24px;
+      }
+
+      strong {
+        color: var(--text);
+      }
+
+      @media (max-width: 640px) {
+        header,
+        footer {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        section {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <header>
+        <a class="brand" href="/">Passe de Batalha</a>
+        <a class="button" href="/login">Entrar</a>
+      </header>
+
+      <main>
+        <div class="hero">
+          <div class="eyebrow">Documento público</div>
+          <h1>Política de Privacidade</h1>
+          <p>Esta política explica como o Passe de Batalha coleta, usa, armazena e protege dados dos usuários.</p>
+          <p class="updated">Última atualização: 21 de setembro de 2026</p>
+        </div>
+
+        <section>
+          <h2>1. Dados que coletamos</h2>
+          <p>Coletamos dados necessários para criar e manter sua conta, como nome, e-mail, identificador de usuário e informações de perfil informadas dentro do app.</p>
+          <p>Também armazenamos informações criadas pelo uso do Passe de Batalha, como missões, hábitos, agenda, treinos, dieta, diário de bordo, progresso, recompensas, preferências e configurações.</p>
+          <p>Quando aplicável, podemos manter dados de status de assinatura para liberar ou bloquear o acesso ao app. Dados completos de pagamento, como número de cartão, não são armazenados pelo Passe de Batalha.</p>
+        </section>
+
+        <section>
+          <h2>2. Como usamos seus dados</h2>
+          <p>Usamos seus dados para autenticar sua conta, salvar seu progresso, exibir suas missões, organizar sua agenda, calcular evolução e manter as funcionalidades do app funcionando corretamente.</p>
+          <p>Também usamos informações técnicas para corrigir erros, melhorar a estabilidade e proteger a plataforma contra acessos indevidos.</p>
+        </section>
+
+        <section>
+          <h2>3. Integração com Google Agenda</h2>
+          <p>Se você conectar sua conta Google, o Passe de Batalha poderá acessar dados do Google Agenda conforme as permissões autorizadas por você na tela de consentimento do Google.</p>
+          <p>A integração é usada exclusivamente para listar eventos do seu calendário principal, exibir compromissos dentro do app e criar eventos no seu calendário quando você solicitar a sincronização.</p>
+          <p>Os dados acessados podem incluir título do evento, descrição, data, horário, recorrência, identificador do evento e link do evento no Google Agenda.</p>
+          <p>O Passe de Batalha pode armazenar identificadores e links de eventos sincronizados para evitar duplicidade, exibir o status da sincronização e permitir o gerenciamento dos compromissos vinculados ao app.</p>
+          <p>Não usamos dados do Google Agenda para publicidade, venda de dados ou compartilhamento com terceiros sem sua autorização.</p>
+          <p>Você pode desconectar o Google Agenda nas configurações do app ou revogar o acesso diretamente na sua Conta Google.</p>
+        </section>
+
+        <section>
+          <h2>4. Compartilhamento de dados</h2>
+          <p>Não vendemos seus dados pessoais.</p>
+          <p>Podemos compartilhar dados apenas com fornecedores necessários para operar o app, como autenticação, banco de dados, hospedagem, suporte, processamento de assinatura e integrações autorizadas por você.</p>
+          <p>Esses fornecedores devem tratar os dados apenas para prestar os serviços contratados e de acordo com regras de segurança e privacidade aplicáveis.</p>
+        </section>
+
+        <section>
+          <h2>5. Segurança e armazenamento</h2>
+          <p>Adotamos medidas técnicas e organizacionais para proteger seus dados contra acesso não autorizado, perda, alteração ou uso indevido.</p>
+          <p>Os dados são armazenados pelo tempo necessário para fornecer as funcionalidades do app, cumprir obrigações legais, resolver problemas técnicos e atender solicitações do usuário.</p>
+          <p>Quando você solicitar exclusão de dados, avaliaremos a solicitação conforme a legislação aplicável e poderemos manter apenas registros necessários para cumprimento legal, auditoria, segurança ou defesa de direitos.</p>
+        </section>
+
+        <section>
+          <h2>6. Seus direitos</h2>
+          <p>Você pode solicitar acesso, correção ou exclusão dos seus dados pessoais, quando aplicável.</p>
+          <p>Também pode solicitar informações sobre o tratamento dos seus dados ou pedir a revogação de consentimentos concedidos.</p>
+          <p>Para exercer esses direitos, entre em contato pelo e-mail <a href="mailto:suporte@gabrielconde.com.br">suporte@gabrielconde.com.br</a>.</p>
+        </section>
+
+        <section>
+          <h2>Contato</h2>
+          <p>Em caso de dúvidas, solicitações relacionadas aos seus dados pessoais ou exercício de direitos previstos na LGPD, entre em contato conosco:</p>
+          <p><strong>Empresa:</strong> 52.972.291 Gabriel Conde Matheus</p>
+          <p><strong>CNPJ:</strong> 52.972.291/0001-83</p>
+          <p><strong>E-mail:</strong> <a href="mailto:suporte@gabrielconde.com.br">suporte@gabrielconde.com.br</a></p>
+          <p><strong>Cidade:</strong> Santo Antônio da Platina - PR</p>
+        </section>
+      </main>
+
+      <footer>
+        <span>© Passe de Batalha. Todos os direitos reservados.</span>
+        <a href="/terms">Termos de Uso</a>
+      </footer>
+    </div>
+  </body>
+</html>
