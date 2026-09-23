@@ -164,6 +164,8 @@ export function useAgenda() {
         description: d.description || undefined,
         recurrence: (d.recurrence || 'none') as AgendaRecurrence,
         source: normalizeSource(d.source),
+        googleCalendarId: d.google_calendar_id || null,
+        googleCalendarLink: d.google_calendar_link || undefined,
         completed: d.status === 'done',
         createdAt: d.created_at || new Date().toISOString()
       })));
@@ -314,7 +316,9 @@ export function useAgenda() {
       description: data.description || null,
       recurrence: data.recurrence,
       status: 'pending',
-      source: 'manual'
+      source: 'manual',
+      google_calendar_id: googleCalendarId,
+      google_calendar_link: googleCalendarLink || null,
     }).select().single();
 
     if (inserted) {
@@ -327,8 +331,8 @@ export function useAgenda() {
         description: inserted.description || undefined,
         recurrence: data.recurrence,
         source: 'manual',
-        googleCalendarId,
-        googleCalendarLink,
+        googleCalendarId: inserted.google_calendar_id || googleCalendarId,
+        googleCalendarLink: inserted.google_calendar_link || googleCalendarLink,
         completed: false,
         createdAt: inserted.created_at || new Date().toISOString(),
       };
@@ -458,11 +462,21 @@ export function useAgenda() {
 
   const deleteEvent = useCallback(async (id: string) => {
     const target = manualEvents.find((e) => e.id === id);
-    if (target?.googleCalendarId && googleSession) {
+    if (target?.googleCalendarId) {
+      if (!googleSession) {
+        const message = 'Reconecte o Google Agenda antes de excluir este evento sincronizado.';
+        setGoogleError(message);
+        throw new Error(message);
+      }
+
       try {
         await deletePrimaryEvent(googleSession, target.googleCalendarId);
       } catch (err) {
-        setGoogleError(err instanceof Error ? err.message : 'Falha ao remover do Google');
+        const message = err instanceof Error ? err.message : 'Falha ao remover do Google';
+        if (!/404|not found/i.test(message)) {
+          setGoogleError(message);
+          throw new Error(message);
+        }
       }
     }
     

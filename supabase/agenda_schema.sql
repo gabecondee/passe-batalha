@@ -10,6 +10,8 @@ CREATE TABLE public.agenda_events (
     description TEXT,
     status TEXT DEFAULT 'pending',
     source TEXT DEFAULT 'manual',
+    google_calendar_id TEXT,
+    google_calendar_link TEXT,
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
