@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 
 import { Plus, Trash2, CalendarIcon } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
@@ -83,8 +84,11 @@ export function AddEventDialog({
       setSyncWithGoogle(Boolean(editing.googleCalendarId));
     } else if (defaultDate) {
       setDate(format(defaultDate, 'yyyy-MM-dd'));
+      setSyncWithGoogle(googleConnected);
+    } else {
+      setSyncWithGoogle(googleConnected);
     }
-  }, [open, editing, defaultDate]);
+  }, [open, editing, defaultDate, googleConnected]);
 
   const reset = () => {
     setName('');
@@ -93,7 +97,7 @@ export function AddEventDialog({
     setTime('');
     setDescription('');
     setRecurrence('none');
-    setSyncWithGoogle(false);
+    setSyncWithGoogle(googleConnected);
   };
 
   const handleSave = async () => {
@@ -233,6 +237,16 @@ export function AddEventDialog({
             <Label htmlFor="evt-desc">Descrição (opcional)</Label>
             <Textarea id="evt-desc" value={description} onChange={(e) => setDescription(e.target.value)} rows={3} />
           </div>
+
+          {googleConnected && !isEditing && (
+            <label className="flex items-center gap-2 rounded-md border border-border/60 bg-background/60 px-3 py-2 text-sm">
+              <Checkbox
+                checked={syncWithGoogle}
+                onCheckedChange={(checked) => setSyncWithGoogle(checked === true)}
+              />
+              <span>Adicionar também ao Google Agenda</span>
+            </label>
+          )}
 
           <Button
             onClick={handleSave}

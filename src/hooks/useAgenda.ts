@@ -296,7 +296,9 @@ export function useAgenda() {
         googleCalendarId = res.id;
         googleCalendarLink = res.htmlLink;
       } catch (err) {
-        setGoogleError(err instanceof Error ? err.message : 'Falha ao criar no Google');
+        const message = err instanceof Error ? err.message : 'Falha ao criar no Google';
+        setGoogleError(message);
+        throw new Error(message);
       }
     }
 
