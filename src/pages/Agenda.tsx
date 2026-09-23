@@ -26,8 +26,10 @@ import {
   ChevronRight,
   Clock,
   Hourglass,
+  LogOut,
   Pencil,
   Plus,
+  RefreshCw,
 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageTransition } from '@/components/layout/PageTransition';
@@ -88,6 +90,7 @@ export default function Agenda() {
     googleError,
     connectGoogleCalendar,
     disconnectGoogleCalendar,
+    syncGoogleEvents,
   } = useAgenda();
 
   const [monthCursor, setMonthCursor] = useState(() => new Date());
@@ -196,22 +199,59 @@ export default function Agenda() {
           </motion.div>
 
 
-          {/* Google Calendar button */}
-          <motion.button
+          {/* Google Calendar integration */}
+          <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            onClick={() => connectGoogleCalendar()}
-            disabled={googleSyncing}
-            className={cn(
-              'w-full rounded-2xl border-2 border-primary/70 bg-primary/5 py-3.5 flex items-center justify-center gap-2 transition-all hover:bg-primary/10 active:scale-[0.99]',
-              'shadow-[0_0_20px_hsl(var(--primary)/0.15)] hover:shadow-[0_0_28px_hsl(var(--primary)/0.3)]',
-            )}
           >
-            <CalendarIcon className="w-4 h-4 text-primary" />
-            <span className="font-display text-sm uppercase tracking-wider text-primary">
-              {googleConnected ? 'Google Agenda conectado' : 'Conectar com Google Agenda'}
-            </span>
-          </motion.button>
+            {googleConnected ? (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-card/45 px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="flex h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-400 shadow-[0_0_10px_hsl(142_76%_36%/0.55)]" />
+                  <span className="truncate text-xs font-medium text-muted-foreground">
+                    Google Agenda conectado
+                  </span>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => syncGoogleEvents()}
+                    disabled={googleSyncing}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-background/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    aria-label="Sincronizar Google Agenda"
+                    title="Sincronizar Google Agenda"
+                  >
+                    <RefreshCw className={cn('h-4 w-4', googleSyncing && 'animate-spin')} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => disconnectGoogleCalendar()}
+                    disabled={googleSyncing}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-background/60 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
+                    aria-label="Desconectar Google Agenda"
+                    title="Desconectar Google Agenda"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => connectGoogleCalendar()}
+                disabled={googleSyncing}
+                className={cn(
+                  'w-full rounded-2xl border-2 border-primary/70 bg-primary/5 py-3.5 flex items-center justify-center gap-2 transition-all hover:bg-primary/10 active:scale-[0.99]',
+                  'shadow-[0_0_20px_hsl(var(--primary)/0.15)] hover:shadow-[0_0_28px_hsl(var(--primary)/0.3)]',
+                )}
+              >
+                <CalendarIcon className="w-4 h-4 text-primary" />
+                <span className="font-display text-sm uppercase tracking-wider text-primary">
+                  Conectar com Google Agenda
+                </span>
+              </button>
+            )}
+          </motion.div>
 
           {/* Today section — collapsible */}
           <motion.section
