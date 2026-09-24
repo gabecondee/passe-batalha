@@ -22,6 +22,7 @@ import { useDragScroll } from '@/hooks/useDragScroll';
 import { format, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { computeTotalReward } from '@/lib/missionRewards';
+import { isMissionActive } from '@/lib/missionStatus';
 
 interface CreateMissionDialogProps {
   onCreate: (data: any) => void;
@@ -162,11 +163,12 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
 
   const difficulty = DIFFICULTIES[form.difficultyIndex];
 
-  // Contagem de missões ativas (não concluídas) por dificuldade
+  // Contagem de missões abertas por dificuldade. Missões concluídas, fracassadas
+  // ou vencidas não ocupam slots para novas missões.
   const activeCountByDifficulty = useMemo(() => {
     const map: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     missions.forEach((m) => {
-      if (m.status !== 'completed' && map[m.difficulty] !== undefined) {
+      if (isMissionActive(m) && map[m.difficulty] !== undefined) {
         map[m.difficulty]++;
       }
     });

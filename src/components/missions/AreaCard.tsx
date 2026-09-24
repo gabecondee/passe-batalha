@@ -1,5 +1,6 @@
 import { AttributeType, Mission } from '@/types/game';
 import { cn } from '@/lib/utils';
+import { isMissionActive } from '@/lib/missionStatus';
 
 import areaPhysical from '@/assets/area-physical.jpg';
 import areaMental from '@/assets/area-mental.jpg';
@@ -53,7 +54,7 @@ const areaConfig: Record<AttributeType, {
 
 export function AreaCard({ attribute, missions, onClick }: AreaCardProps) {
   const config = areaConfig[attribute];
-  const active = missions.filter(m => m.status !== 'completed').length;
+  const active = missions.filter(isMissionActive).length;
   const completed = missions.filter(m => m.status === 'completed').length;
 
   return (

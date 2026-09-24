@@ -25,7 +25,8 @@ import {
   Gem,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, differenceInCalendarDays, isPast, parseISO } from 'date-fns';
+import { getMissionState, MissionViewState } from '@/lib/missionStatus';
+import { format, differenceInCalendarDays, parseISO } from 'date-fns';
 
 interface AreaMissionsViewProps {
   attribute: AttributeType;
@@ -63,19 +64,6 @@ const DIFFICULTY_LABELS: Record<number, { label: string; color: string; icon: ty
 };
 
 type FilterKey = 'all' | 'active' | 'completed' | 'failed';
-type MissionState = 'active' | 'completed' | 'failed';
-
-function getMissionState(m: Mission): MissionState {
-  if (m.status === 'completed') return 'completed';
-  if (m.status === 'failed') return 'failed';
-  if (m.deadline) {
-    try {
-      const d = parseISO(m.deadline);
-      if (isPast(d) && differenceInCalendarDays(d, new Date()) < 0) return 'failed';
-    } catch {}
-  }
-  return 'active';
-}
 
 function Hexagon({
   children,
@@ -102,7 +90,7 @@ function Hexagon({
 }
 
 
-function deadlineLabel(m: Mission, state: MissionState): string {
+function deadlineLabel(m: Mission, state: MissionViewState): string {
   if (!m.deadline) return state === 'completed' ? 'Concluída' : state === 'failed' ? 'Fracassada' : 'Sem prazo';
   try {
     const d = parseISO(m.deadline);

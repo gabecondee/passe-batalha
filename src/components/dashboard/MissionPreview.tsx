@@ -1,5 +1,6 @@
 import { Mission } from '@/types/game';
 import { cn } from '@/lib/utils';
+import { isMissionActive } from '@/lib/missionStatus';
 import { Clock, Star, Skull, CheckCircle2, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -29,7 +30,7 @@ const missionTypeLabels: Record<string, string> = {
 };
 
 export function MissionPreview({ missions }: MissionPreviewProps) {
-  const activeMissions = missions.filter(m => m.status !== 'completed').slice(0, 4);
+  const activeMissions = missions.filter(isMissionActive).slice(0, 4);
 
   return (
     <div className="fantasy-card p-6">

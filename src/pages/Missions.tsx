@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { AreaMissionsView } from '@/components/missions/AreaMissionsView';
 import { useGame } from '@/contexts/GameContext';
 import { AttributeType } from '@/types/game';
+import { isMissionActive } from '@/lib/missionStatus';
 import {
   Crosshair,
 
@@ -72,7 +73,7 @@ export default function Missions() {
   const activeByDifficulty = useMemo(() => {
     const map: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     missions.forEach(m => {
-      if (m.status !== 'completed') map[m.difficulty] = (map[m.difficulty] || 0) + 1;
+      if (isMissionActive(m)) map[m.difficulty] = (map[m.difficulty] || 0) + 1;
     });
     return map;
   }, [missions]);
@@ -80,7 +81,7 @@ export default function Missions() {
   const activeByArea = useMemo(() => {
     const map: Record<string, number> = {};
     missions.forEach(m => {
-      if (m.status !== 'completed') map[m.attribute] = (map[m.attribute] || 0) + 1;
+      if (isMissionActive(m)) map[m.attribute] = (map[m.attribute] || 0) + 1;
     });
     return map;
   }, [missions]);
