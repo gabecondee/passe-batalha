@@ -82,6 +82,88 @@ const defaultBattle = (bossId: string): BossBattle => ({
   currentDay: 0,
 });
 
+function startOfLocalDay(date: Date): Date {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+export function getBattleDayForDate(startedAt: string, durationDays: number, now = new Date()): number {
+  const start = new Date(startedAt);
+  if (!startedAt || Number.isNaN(start.getTime()) || durationDays <= 0) return 1;
+
+  const diffMs = startOfLocalDay(now).getTime() - startOfLocalDay(start).getTime();
+  const diffDays = Math.floor(diffMs / 86_400_000);
+  return Math.min(Math.max(diffDays + 1, 1), durationDays + 1);
+}
+
+export function getCalendarStartOffset(startedAt: string): number {
+  const start = new Date(startedAt);
+  if (!startedAt || Number.isNaN(start.getTime())) return 0;
+
+  // Monday-first calendar: S T Q Q S S D.
+  return (start.getDay() + 6) % 7;
+}
+
+function getBattleDayCompletedAt(startedAt: string, day: number): string {
+  const start = new Date(startedAt);
+  const completedAt = Number.isNaN(start.getTime()) ? new Date() : startOfLocalDay(start);
+  completedAt.setDate(completedAt.getDate() + Math.max(0, day - 1));
+  completedAt.setHours(23, 59, 59, 999);
+  return completedAt.toISOString();
+}
+
+function resolveBattleStatus(
+  days: BattleDay[],
+  durationDays: number,
+  maxFails: number,
+  currentStatus: BattleStatus,
+): BattleStatus {
+  if (currentStatus !== 'active') return currentStatus;
+
+  const failCount = days.filter(d => d.status === 'fail').length;
+  const completedCount = days.filter(d => d.status !== 'pending').length;
+
+  if (failCount > maxFails) return 'lost';
+  if (completedCount >= durationDays) return 'won';
+  return 'active';
+}
+
+function normalizeBattleForToday(
+  battle: BossBattle,
+  boss: Boss | undefined,
+  now = new Date(),
+): { battle: BossBattle; changed: boolean } {
+  if (battle.status !== 'active') return { battle, changed: false };
+
+  const todayBattleDay = getBattleDayForDate(battle.startedAt, battle.durationDays, now);
+  let changed = false;
+
+  const days = battle.days.map(day => {
+    if (day.status !== 'pending') return day;
+    if (day.day >= todayBattleDay) return day;
+    changed = true;
+    return { ...day, status: 'fail' as DayStatus, completedAt: getBattleDayCompletedAt(battle.startedAt, day.day) };
+  });
+
+  const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
+  const status = resolveBattleStatus(days, battle.durationDays, maxFails, battle.status);
+  const statusChanged = status !== battle.status;
+  const currentDay = Math.min(todayBattleDay, battle.durationDays);
+
+  return {
+    battle: {
+      ...battle,
+      days,
+      status,
+      currentDay,
+      wins: statusChanged && status === 'won' ? battle.wins + 1 : battle.wins,
+      losses: statusChanged && status === 'lost' ? battle.losses + 1 : battle.losses,
+    },
+    changed: changed || statusChanged || currentDay !== battle.currentDay,
+  };
+}
+
 export function BossProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [bosses, setBosses] = useState<Boss[]>([]);
@@ -99,8 +181,9 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const { data: bossesData, error: bossesErr } = await bossesQuery
         .order('created_at', { ascending: false });
 
+      let fetchedBosses: Boss[] = [];
       if (!bossesErr && bossesData) {
-        const fetchedBosses: Boss[] = bossesData.map((d: any) => ({
+        fetchedBosses = bossesData.map((d: any) => ({
           id: d.id,
           name: d.name,
           class: d.class || d.vice || 'Desafio',
@@ -127,8 +210,8 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
           weaknesses: d.weaknesses || [],
           dailyTasks: d.daily_tasks || [],
         }));
-        setBosses(fetchedBosses);
       }
+      setBosses(fetchedBosses);
 
       // 2. Fetch user boss battles if logged in
       if (user) {
@@ -145,7 +228,8 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
 
           for (const b of sorted) {
             const days = (b.days_history as BattleDay[]) || [];
-            hydratedBattles[b.boss_id] = {
+            const boss = fetchedBosses.find(item => item.id === b.boss_id);
+            const battle: BossBattle = {
               bossId: b.boss_id,
               status: b.status as BattleStatus,
               startedAt: b.started_at,
@@ -153,9 +237,28 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
               days,
               wins: b.status === 'won' ? 1 : 0,
               losses: b.status === 'lost' ? 1 : 0,
-              currentDay: days.filter(d => d.status !== 'pending').length + 1 || 1,
+              currentDay:
+                b.status === 'active'
+                  ? Math.min(getBattleDayForDate(b.started_at, b.duration_days), b.duration_days)
+                  : Math.min(days.filter(d => d.status !== 'pending').length + 1 || 1, b.duration_days),
               rewardsProcessed: b.status === 'won' || b.status === 'lost',
             };
+            const normalized = normalizeBattleForToday(battle, boss);
+            hydratedBattles[b.boss_id] = normalized.battle;
+
+            if (normalized.changed) {
+              supabase.from('boss_battles')
+                .update({
+                  days_history: normalized.battle.days,
+                  status: normalized.battle.status,
+                })
+                .eq('user_id', user.id)
+                .eq('boss_id', b.boss_id)
+                .eq('status', 'active')
+                .then(({ error }) => {
+                  if (error) console.error('Erro ao sincronizar dias perdidos do boss:', error);
+                });
+            }
           }
           setBattles(hydratedBattles);
         }

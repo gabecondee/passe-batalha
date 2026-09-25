@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageTransition } from '@/components/layout/PageTransition';
-import { useBoss } from '@/contexts/BossContext';
+import { getCalendarStartOffset, useBoss } from '@/contexts/BossContext';
 import { useGame } from '@/contexts/GameContext';
 import { difficultyLabels, difficultyColors } from '@/types/boss';
 import { cn } from '@/lib/utils';
@@ -104,6 +104,7 @@ export default function BossDetail() {
   const successCount = battle.days.filter(d => d.status === 'success').length;
   const failCount = battle.days.filter(d => d.status === 'fail').length;
   const selectedDayData = selectedDay ? battle.days.find(d => d.day === selectedDay) : null;
+  const calendarStartOffset = getCalendarStartOffset(battle.startedAt);
 
   return (
     <MainLayout>
@@ -308,7 +309,16 @@ export default function BossDetail() {
                     const actedToday = battle.days.some(
                       d => d.completedAt && new Date(d.completedAt).toDateString() === todayStr
                     );
-                    return battle.days.map((dayData) => {
+                    return (
+                      <>
+                        {Array.from({ length: calendarStartOffset }).map((_, index) => (
+                          <div
+                            key={`empty-${index}`}
+                            aria-hidden="true"
+                            className="aspect-square rounded-lg border border-transparent"
+                          />
+                        ))}
+                        {battle.days.map((dayData) => {
                     const isCurrent = dayData.day === battle.currentDay;
                     const isRecorded = dayData.status === 'success' || dayData.status === 'fail';
                     // Recorded days: always clickable for read-only view.
@@ -340,7 +350,9 @@ export default function BossDetail() {
                         {dayData.status === 'fail' && <X className="w-2.5 h-2.5 mt-0.5" />}
                       </button>
                     );
-                  });
+                  })}
+                      </>
+                    );
                   })()}
                 </div>
               </div>
