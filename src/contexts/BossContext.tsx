@@ -33,7 +33,7 @@ interface BossContextType {
   battles: Record<string, BossBattle>;
   getBattle: (bossId: string) => BossBattle;
   startBattle: (bossId: string, durationDays?: number) => void;
-  recordDayAction: (bossId: string, day: number, success: boolean) => void;
+  recordDayAction: (bossId: string, day: number, success: boolean) => Promise<boolean>;
   abandonBattle: (bossId: string) => void;
   getProgress: (bossId: string) => number;
   getActiveBattles: () => { boss: Boss; battle: BossBattle }[];
@@ -46,6 +46,14 @@ interface BossContextType {
 }
 
 const BossContext = createContext<BossContextType | undefined>(undefined);
+const APP_TIME_ZONE = 'America/Sao_Paulo';
+const DAY_MS = 86_400_000;
+
+interface AppDateParts {
+  year: number;
+  month: number;
+  day: number;
+}
 
 function generateDayActions(boss: Boss, duration: number): BattleDay[] {
   if (boss.dailyTasks && boss.dailyTasks.length >= duration) {
@@ -82,35 +90,75 @@ const defaultBattle = (bossId: string): BossBattle => ({
   currentDay: 0,
 });
 
-function startOfLocalDay(date: Date): Date {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
+function getAppDateParts(date: Date): AppDateParts {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const get = (type: string) => Number(parts.find(part => part.type === type)?.value);
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+  };
+}
+
+function appDateIndex(parts: AppDateParts): number {
+  return Math.floor(Date.UTC(parts.year, parts.month - 1, parts.day) / DAY_MS);
+}
+
+function appDateKey(parts: AppDateParts): string {
+  return [
+    String(parts.year).padStart(4, '0'),
+    String(parts.month).padStart(2, '0'),
+    String(parts.day).padStart(2, '0'),
+  ].join('-');
+}
+
+function appDateFromIndex(index: number): AppDateParts {
+  const date = new Date(index * DAY_MS);
+  return {
+    year: date.getUTCFullYear(),
+    month: date.getUTCMonth() + 1,
+    day: date.getUTCDate(),
+  };
+}
+
+export function getAppDateKey(date = new Date()): string {
+  return appDateKey(getAppDateParts(date));
 }
 
 export function getBattleDayForDate(startedAt: string, durationDays: number, now = new Date()): number {
   const start = new Date(startedAt);
   if (!startedAt || Number.isNaN(start.getTime()) || durationDays <= 0) return 1;
 
-  const diffMs = startOfLocalDay(now).getTime() - startOfLocalDay(start).getTime();
-  const diffDays = Math.floor(diffMs / 86_400_000);
+  const diffDays = appDateIndex(getAppDateParts(now)) - appDateIndex(getAppDateParts(start));
   return Math.min(Math.max(diffDays + 1, 1), durationDays + 1);
 }
 
 export function getCalendarStartOffset(startedAt: string): number {
-  const start = new Date(startedAt);
-  if (!startedAt || Number.isNaN(start.getTime())) return 0;
+  const dateKey = getBattleDayDateKey(startedAt, 1);
+  if (!dateKey) return 0;
+  const [year, month, day] = dateKey.split('-').map(Number);
 
   // Monday-first calendar: S T Q Q S S D.
-  return (start.getDay() + 6) % 7;
+  return (new Date(Date.UTC(year, month - 1, day)).getUTCDay() + 6) % 7;
+}
+
+export function getBattleDayDateKey(startedAt: string, day: number): string {
+  const start = new Date(startedAt);
+  if (!startedAt || Number.isNaN(start.getTime())) return '';
+
+  const startIndex = appDateIndex(getAppDateParts(start));
+  return appDateKey(appDateFromIndex(startIndex + Math.max(0, day - 1)));
 }
 
 function getBattleDayCompletedAt(startedAt: string, day: number): string {
-  const start = new Date(startedAt);
-  const completedAt = Number.isNaN(start.getTime()) ? new Date() : startOfLocalDay(start);
-  completedAt.setDate(completedAt.getDate() + Math.max(0, day - 1));
-  completedAt.setHours(23, 59, 59, 999);
-  return completedAt.toISOString();
+  const dateKey = getBattleDayDateKey(startedAt, day);
+  return dateKey ? `${dateKey}T12:00:00.000` : new Date().toISOString();
 }
 
 function resolveBattleStatus(
@@ -272,6 +320,49 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     fetchData();
   }, [fetchData]);
 
+  useEffect(() => {
+    const syncActiveBattles = () => {
+      setBattles(prev => {
+        let changed = false;
+        const next = { ...prev };
+
+        Object.entries(prev).forEach(([bossId, battle]) => {
+          const boss = bosses.find(item => item.id === bossId);
+          const normalized = normalizeBattleForToday(battle, boss);
+          if (!normalized.changed) return;
+
+          changed = true;
+          next[bossId] = normalized.battle;
+
+          if (user) {
+            supabase.from('boss_battles')
+              .update({
+                days_history: normalized.battle.days,
+                status: normalized.battle.status,
+              })
+              .eq('user_id', user.id)
+              .eq('boss_id', bossId)
+              .eq('status', 'active')
+              .then(({ error }) => {
+                if (error) console.error('Erro ao sincronizar batalha ativa do boss:', error);
+              });
+          }
+        });
+
+        return changed ? next : prev;
+      });
+    };
+
+    syncActiveBattles();
+    const interval = window.setInterval(syncActiveBattles, 60_000);
+    window.addEventListener('focus', syncActiveBattles);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', syncActiveBattles);
+    };
+  }, [bosses, user]);
+
   const getBattle = useCallback((bossId: string): BossBattle => {
     return battles[bossId] || defaultBattle(bossId);
   }, [battles]);
@@ -358,66 +449,91 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     toast.success('⚔️ Batalha iniciada! Boa sorte, guerreiro!');
   }, [battles, bosses, user]);
 
-  const recordDayAction = useCallback((bossId: string, day: number, success: boolean) => {
-    setBattles(prev => {
-      const battle = prev[bossId];
-      if (!battle || battle.status !== 'active') return prev;
+  const recordDayAction = useCallback(async (bossId: string, day: number, success: boolean): Promise<boolean> => {
+    if (!user) {
+      toast.error('Sessão expirada. Entre novamente para registrar o golpe.');
+      return false;
+    }
 
-      const newDays = battle.days.map(d =>
-        d.day === day
-          ? { ...d, status: (success ? 'success' : 'fail') as DayStatus, completedAt: new Date().toISOString() }
-          : d
-      );
+    const currentBattle = battles[bossId];
+    const boss = bosses.find(b => b.id === bossId);
+    const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
+    const battle = normalized?.battle;
 
-      const successCount = newDays.filter(d => d.status === 'success').length;
-      const failCount = newDays.filter(d => d.status === 'fail').length;
-      const boss = bosses.find(b => b.id === bossId);
-      const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
+    if (!battle || battle.status !== 'active') return false;
 
-      let newStatus: BattleStatus = 'active';
-      let wins = battle.wins;
-      let losses = battle.losses;
-      let currentDay = Math.min(day + 1, battle.durationDays);
-
-      const completedCount = successCount + failCount;
-      const remainingDays = battle.durationDays - completedCount;
-
-      if (failCount > maxFails) {
-        newStatus = 'lost';
-        losses += 1;
-        toast.error('💀 Você foi derrotado... Tente novamente!');
-      } else if (remainingDays === 0) {
-        newStatus = 'won';
-        wins += 1;
-        toast.success('🏆 Boss derrotado! Você venceu a batalha!');
-      } else if (success) {
-        toast.success('⚔️ Golpe aplicado! Continue firme!');
-      } else {
-        toast.warning('😤 Falha registrada. Não desista!');
+    if (day !== battle.currentDay) {
+      toast.info('Este golpe não pertence mais ao dia atual da batalha.');
+      if (normalized?.changed) {
+        setBattles(prev => ({ ...prev, [bossId]: battle }));
       }
+      return false;
+    }
 
-      const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
+    const newDays = battle.days.map(d =>
+      d.day === day
+        ? { ...d, status: (success ? 'success' : 'fail') as DayStatus, completedAt: new Date().toISOString() }
+        : d
+    );
 
-      if (user) {
-        supabase.from('boss_battles')
-          .update({
-            days_history: newDays,
-            status: newStatus,
-          })
-          .eq('user_id', user.id)
-          .eq('boss_id', bossId)
-          .eq('status', 'active').then();
-      }
+    const successCount = newDays.filter(d => d.status === 'success').length;
+    const failCount = newDays.filter(d => d.status === 'fail').length;
+    const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
 
-      // Emite evento para que useAchievementsData reavalie conquistas de boss_hits
-      emit({ type: 'boss:hit', bossId, success });
+    let newStatus: BattleStatus = 'active';
+    let wins = battle.wins;
+    let losses = battle.losses;
+    const currentDay = Math.min(day + 1, battle.durationDays);
 
-      return {
-        ...prev,
-        [bossId]: nextBattle,
-      };
-    });
-  }, [bosses, user]);
+    const completedCount = successCount + failCount;
+    const remainingDays = battle.durationDays - completedCount;
+
+    if (failCount > maxFails) {
+      newStatus = 'lost';
+      losses += 1;
+    } else if (remainingDays === 0) {
+      newStatus = 'won';
+      wins += 1;
+    }
+
+    const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
+
+    const { data, error } = await supabase.from('boss_battles')
+      .update({
+        days_history: newDays,
+        status: newStatus,
+      })
+      .eq('user_id', user.id)
+      .eq('boss_id', bossId)
+      .eq('status', 'active')
+      .select('boss_id')
+      .maybeSingle();
+
+    if (error || !data) {
+      console.error('Erro ao registrar golpe do boss:', error);
+      toast.error('Não foi possível salvar o golpe. Verifique sua conexão e tente novamente.');
+      return false;
+    }
+
+    setBattles(prev => ({
+      ...prev,
+      [bossId]: nextBattle,
+    }));
+
+    if (newStatus === 'lost') {
+      toast.error('💀 Você foi derrotado... Tente novamente!');
+    } else if (newStatus === 'won') {
+      toast.success('🏆 Boss derrotado! Você venceu a batalha!');
+    } else if (success) {
+      toast.success('⚔️ Golpe aplicado! Continue firme!');
+    } else {
+      toast.warning('😤 Falha registrada. Não desista!');
+    }
+
+    // Emite evento para que useAchievementsData reavalie conquistas de boss_hits
+    emit({ type: 'boss:hit', bossId, success });
+    return true;
+  }, [battles, bosses, user]);
 
   const getProgress = useCallback((bossId: string): number => {
     const battle = battles[bossId];
@@ -437,15 +553,18 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   }, [battles, bosses]);
 
   const getTodayBossAction = useCallback((bossId: string): BattleDay | null => {
-    const battle = battles[bossId];
+    const currentBattle = battles[bossId];
+    const boss = bosses.find(b => b.id === bossId);
+    const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
+    const battle = normalized?.battle;
     if (!battle || battle.status !== 'active') return null;
-    const today = new Date().toDateString();
+    const today = getAppDateKey();
     const actedToday = battle.days.some(
-      d => d.completedAt && new Date(d.completedAt).toDateString() === today
+      d => d.completedAt && getAppDateKey(new Date(d.completedAt)) === today
     );
     if (actedToday) return null;
     return battle.days.find(d => d.day === battle.currentDay && d.status === 'pending') || null;
-  }, [battles]);
+  }, [battles, bosses]);
 
   const abandonBattle = useCallback((bossId: string) => {
     setBattles(prev => {

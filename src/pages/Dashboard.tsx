@@ -64,6 +64,7 @@ export default function Dashboard() {
   const [agendaOpen, setAgendaOpen] = useState(false);
   const [missionsOpen, setMissionsOpen] = useState(false);
   const [bossOpen, setBossOpen] = useState(false);
+  const [recordingBossAction, setRecordingBossAction] = useState<string | null>(null);
 
 
 
@@ -437,6 +438,8 @@ export default function Dashboard() {
               {activeBattles.map(({ boss, battle }) => {
                 const todayAction = getTodayBossAction(boss.id);
                 const progress = getProgress(boss.id);
+                const recordingKey = todayAction ? `${boss.id}:${todayAction.day}` : null;
+                const isRecording = !!recordingKey && recordingBossAction === recordingKey;
                 return (
                   <div key={boss.id} className="rounded-lg bg-muted/30 border border-border/50 p-3 space-y-2">
                     <div className="flex items-center gap-2">
@@ -458,16 +461,32 @@ export default function Dashboard() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <button
-                            onClick={() => recordDayAction(boss.id, todayAction.day, true)}
-                            className="px-2 py-1.5 rounded-md bg-emerald-500/15 border border-emerald-500/40 hover:bg-emerald-500/25 transition text-xs font-display tracking-wider text-emerald-300"
+                            disabled={isRecording}
+                            onClick={async () => {
+                              setRecordingBossAction(recordingKey);
+                              try {
+                                await recordDayAction(boss.id, todayAction.day, true);
+                              } finally {
+                                setRecordingBossAction(null);
+                              }
+                            }}
+                            className="px-2 py-1.5 rounded-md bg-emerald-500/15 border border-emerald-500/40 hover:bg-emerald-500/25 transition text-xs font-display tracking-wider text-emerald-300 disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            ✅ CONCLUIR
+                            {isRecording ? 'SALVANDO...' : '✅ CONCLUIR'}
                           </button>
                           <button
-                            onClick={() => recordDayAction(boss.id, todayAction.day, false)}
-                            className="px-2 py-1.5 rounded-md bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 transition text-xs font-display tracking-wider text-rose-300"
+                            disabled={isRecording}
+                            onClick={async () => {
+                              setRecordingBossAction(recordingKey);
+                              try {
+                                await recordDayAction(boss.id, todayAction.day, false);
+                              } finally {
+                                setRecordingBossAction(null);
+                              }
+                            }}
+                            className="px-2 py-1.5 rounded-md bg-rose-500/15 border border-rose-500/40 hover:bg-rose-500/25 transition text-xs font-display tracking-wider text-rose-300 disabled:opacity-60 disabled:cursor-not-allowed"
                           >
-                            ✖ FALHEI
+                            {isRecording ? 'SALVANDO...' : '✖ FALHEI'}
                           </button>
                         </div>
                       </div>

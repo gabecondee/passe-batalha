@@ -1,7 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageTransition } from '@/components/layout/PageTransition';
-import { getCalendarStartOffset, useBoss } from '@/contexts/BossContext';
+import {
+  getAppDateKey,
+  getBattleDayDateKey,
+  getBattleDayForDate,
+  getCalendarStartOffset,
+  useBoss,
+} from '@/contexts/BossContext';
 import { useGame } from '@/contexts/GameContext';
 import { difficultyLabels, difficultyColors } from '@/types/boss';
 import { cn } from '@/lib/utils';
@@ -32,6 +38,7 @@ export default function BossDetail() {
   const [confirmAbandonOpen, setConfirmAbandonOpen] = useState(false);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [testUnlocked, setTestUnlocked] = useState(false);
+  const [recordingDay, setRecordingDay] = useState<number | null>(null);
 
   const boss = bosses.find(b => b.id === id);
   const battle = boss ? getBattle(boss.id) : null;
@@ -105,6 +112,9 @@ export default function BossDetail() {
   const failCount = battle.days.filter(d => d.status === 'fail').length;
   const selectedDayData = selectedDay ? battle.days.find(d => d.day === selectedDay) : null;
   const calendarStartOffset = getCalendarStartOffset(battle.startedAt);
+  const liveCurrentDay = isActive
+    ? Math.min(getBattleDayForDate(battle.startedAt, battle.durationDays), battle.durationDays)
+    : battle.currentDay;
 
   return (
     <MainLayout>
@@ -305,9 +315,9 @@ export default function BossDetail() {
 
                 <div className="grid grid-cols-7 gap-1.5">
                   {(() => {
-                    const todayStr = new Date().toDateString();
+                    const todayKey = getAppDateKey();
                     const actedToday = battle.days.some(
-                      d => d.completedAt && new Date(d.completedAt).toDateString() === todayStr
+                      d => d.completedAt && getAppDateKey(new Date(d.completedAt)) === todayKey
                     );
                     return (
                       <>
@@ -319,13 +329,17 @@ export default function BossDetail() {
                           />
                         ))}
                         {battle.days.map((dayData) => {
-                    const isCurrent = dayData.day === battle.currentDay;
-                    const isRecorded = dayData.status === 'success' || dayData.status === 'fail';
+                    const isCurrent = dayData.day === liveCurrentDay;
+                    const isPastPending = isActive && dayData.status === 'pending' && dayData.day < liveCurrentDay;
+                    const visualStatus = isPastPending ? 'fail' : dayData.status;
+                    const dateKey = getBattleDayDateKey(battle.startedAt, dayData.day);
+                    const dateLabel = dateKey ? dateKey.slice(5).split('-').reverse().join('/') : '';
+                    const isRecorded = visualStatus === 'success' || visualStatus === 'fail';
                     // Recorded days: always clickable for read-only view.
                     // Pending days: clickable if active AND (test unlocked OR (not acted today AND is current day)).
                     const isClickable =
                       isRecorded ||
-                      (isActive && dayData.status === 'pending' && (testUnlocked || (!actedToday && dayData.day === battle.currentDay)));
+                      (isActive && dayData.status === 'pending' && !isPastPending && (testUnlocked || (!actedToday && dayData.day === liveCurrentDay)));
                     return (
                       <button
                         key={dayData.day}
@@ -333,9 +347,9 @@ export default function BossDetail() {
                         onClick={() => isClickable && setSelectedDay(dayData.day)}
                         className={cn(
                           "aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] font-medium transition-all duration-200 border",
-                          dayData.status === 'success'
+                          visualStatus === 'success'
                             ? "bg-primary/15 border-primary/40 text-primary shadow-[0_0_8px_hsl(var(--primary)/0.2)]"
-                            : dayData.status === 'fail'
+                            : visualStatus === 'fail'
                               ? "bg-red-500/15 border-red-500/40 text-red-400"
                               : isCurrent && isActive
                                 ? "bg-primary/10 border-primary text-primary shadow-[0_0_12px_hsl(var(--primary)/0.5)] cursor-pointer hover:bg-primary/20"
@@ -346,8 +360,11 @@ export default function BossDetail() {
                         )}
                       >
                         <span>{dayData.day}</span>
-                        {dayData.status === 'success' && <CheckCircle2 className="w-2.5 h-2.5 mt-0.5" />}
-                        {dayData.status === 'fail' && <X className="w-2.5 h-2.5 mt-0.5" />}
+                        {visualStatus === 'success' && <CheckCircle2 className="w-2.5 h-2.5 mt-0.5" />}
+                        {visualStatus === 'fail' && <X className="w-2.5 h-2.5 mt-0.5" />}
+                        {visualStatus === 'pending' && dateLabel && (
+                          <span className="mt-0.5 text-[8px] leading-none text-muted-foreground/55">{dateLabel}</span>
+                        )}
                       </button>
                     );
                   })}
@@ -372,20 +389,42 @@ export default function BossDetail() {
                       {selectedDayData.status === 'pending' ? (
                         <div className="grid grid-cols-2 gap-3">
                           <Button
-                            onClick={() => { recordDayAction(boss.id, selectedDay!, true); setSelectedDay(null); }}
+                            disabled={recordingDay === selectedDay}
+                            onClick={async () => {
+                              setRecordingDay(selectedDay!);
+                              try {
+                                const saved = await recordDayAction(boss.id, selectedDay!, true);
+                                if (saved) setSelectedDay(null);
+                              } finally {
+                                setRecordingDay(null);
+                              }
+                            }}
                             className="h-16 flex-col gap-1 bg-green-500/10 border border-green-500/30 text-green-400 hover:bg-green-500/20"
                             variant="ghost"
                           >
                             <CheckCircle2 className="w-6 h-6" />
-                            <span className="text-xs font-medium">Concluir ação</span>
+                            <span className="text-xs font-medium">
+                              {recordingDay === selectedDay ? 'Salvando...' : 'Concluir ação'}
+                            </span>
                           </Button>
                           <Button
-                            onClick={() => { recordDayAction(boss.id, selectedDay!, false); setSelectedDay(null); }}
+                            disabled={recordingDay === selectedDay}
+                            onClick={async () => {
+                              setRecordingDay(selectedDay!);
+                              try {
+                                const saved = await recordDayAction(boss.id, selectedDay!, false);
+                                if (saved) setSelectedDay(null);
+                              } finally {
+                                setRecordingDay(null);
+                              }
+                            }}
                             className="h-16 flex-col gap-1 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20"
                             variant="ghost"
                           >
                             <X className="w-6 h-6" />
-                            <span className="text-xs font-medium">Falhei hoje</span>
+                            <span className="text-xs font-medium">
+                              {recordingDay === selectedDay ? 'Salvando...' : 'Falhei hoje'}
+                            </span>
                           </Button>
                         </div>
                       ) : (
