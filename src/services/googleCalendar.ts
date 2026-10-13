@@ -1,122 +1,34 @@
 import { AgendaEvent, AgendaCategory } from '@/types/agenda';
 
-const GIS_SRC = 'https://accounts.google.com/gsi/client';
-const SCOPE = 'https://www.googleapis.com/auth/calendar.events';
-const API_BASE = 'https://www.googleapis.com/calendar/v3';
+import { supabase } from '@/integrations/supabase/client';
 
-export interface GoogleSession {
-  accessToken: string;
-  expiresAt: number; // epoch ms
+export class GoogleCalendarError extends Error {
+  constructor(message: string, public code?: string) { super(message); }
 }
 
-declare global {
-  interface Window {
-    google?: any;
-  }
-}
-
-export function getClientId(): string | undefined {
-  return import.meta.env.VITE_GOOGLE_CALENDAR_CLIENT_ID as string | undefined;
-}
-
-export function isConfigured(): boolean {
-  return Boolean(getClientId());
-}
-
-let gisLoadPromise: Promise<void> | null = null;
-
-export function loadGisScript(): Promise<void> {
-  if (typeof window === 'undefined') return Promise.resolve();
-  if (window.google?.accounts?.oauth2) return Promise.resolve();
-  if (gisLoadPromise) return gisLoadPromise;
-
-  gisLoadPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SRC}"]`);
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Falha ao carregar Google Identity Services')));
-      return;
+async function calendarRequest<T>(body: Record<string, unknown>): Promise<T> {
+  const { data, error } = await supabase.functions.invoke('google-calendar', { body });
+  if (error) {
+    let details: { error?: string; code?: string } | undefined;
+    if (error.context instanceof Response) {
+      details = await error.context.clone().json().catch(() => undefined);
     }
-    const s = document.createElement('script');
-    s.src = GIS_SRC;
-    s.async = true;
-    s.defer = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Falha ao carregar Google Identity Services'));
-    document.head.appendChild(s);
-  });
-  return gisLoadPromise;
+    throw new GoogleCalendarError(details?.error || 'Não foi possível acessar o Google Agenda. Verifique sua conexão e tente novamente.', details?.code);
+  }
+  if (data?.error) throw new GoogleCalendarError(data.error, data.code);
+  return data as T;
 }
 
-export async function requestAccessToken(): Promise<GoogleSession> {
-  const clientId = getClientId();
-  if (!clientId) {
-    throw new Error('Configure VITE_GOOGLE_CALENDAR_CLIENT_ID para conectar o Google Agenda.');
-  }
-  await loadGisScript();
-  if (!window.google?.accounts?.oauth2) {
-    throw new Error('Google Identity Services indisponível.');
-  }
-
-  return new Promise<GoogleSession>((resolve, reject) => {
-    const tokenClient = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: SCOPE,
-      prompt: '',
-      callback: (resp: any) => {
-        if (resp.error) {
-          reject(new Error(resp.error_description || resp.error));
-          return;
-        }
-        const expiresIn = Number(resp.expires_in ?? 3600);
-        resolve({
-          accessToken: resp.access_token,
-          expiresAt: Date.now() + expiresIn * 1000,
-        });
-      },
-      error_callback: (err: any) => reject(new Error(err?.message || 'OAuth cancelado')),
-    });
-    tokenClient.requestAccessToken({ prompt: 'consent' });
-  });
+export function getGoogleConnection(): Promise<{ connected: boolean; needsReconnect: boolean }> {
+  return calendarRequest({ action: 'status' });
 }
 
-export function revokeAccess(session: GoogleSession | null): Promise<void> {
-  if (!session?.accessToken) return Promise.resolve();
-  return new Promise((resolve) => {
-    if (window.google?.accounts?.oauth2?.revoke) {
-      window.google.accounts.oauth2.revoke(session.accessToken, () => resolve());
-    } else {
-      resolve();
-    }
-  });
+export function startGoogleConnection(): Promise<{ authorizationUrl: string }> {
+  return calendarRequest({ action: 'connect', origin: window.location.origin });
 }
 
-function isExpired(session: GoogleSession): boolean {
-  return Date.now() >= session.expiresAt - 60_000;
-}
-
-async function api<T>(
-  session: GoogleSession,
-  path: string,
-  init: RequestInit = {},
-): Promise<T> {
-  if (isExpired(session)) {
-    throw new Error('Sessão Google expirada. Reconecte.');
-  }
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${session.accessToken}`,
-      'Content-Type': 'application/json',
-      ...(init.headers || {}),
-    },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Google Calendar API ${res.status}: ${text || res.statusText}`);
-  }
-  if (res.status === 204) return undefined as unknown as T;
-  return (await res.json()) as T;
+export async function disconnectGoogleConnection(): Promise<void> {
+  await calendarRequest({ action: 'disconnect' });
 }
 
 // ---------- Category inference ----------
@@ -154,7 +66,7 @@ interface GoogleEvent {
 export function googleToAgenda(g: GoogleEvent): AgendaEvent | null {
   const startIso = g.start?.dateTime ?? g.start?.date;
   if (!startIso) return null;
-  const d = new Date(startIso);
+  const d = new Date(g.start?.dateTime ? startIso : startIso + 'T00:00:00');
   const date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const time = g.start?.dateTime
     ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
@@ -211,46 +123,17 @@ export function agendaToGooglePayload(event: {
 
 // ---------- API ops ----------
 
-export async function listPrimaryEvents(session: GoogleSession): Promise<AgendaEvent[]> {
-  const now = new Date();
-  const inSixty = new Date();
-  inSixty.setDate(inSixty.getDate() + 60);
-  const params = new URLSearchParams({
-    timeMin: now.toISOString(),
-    timeMax: inSixty.toISOString(),
-    singleEvents: 'true',
-    orderBy: 'startTime',
-    maxResults: '250',
-  });
-  const data = await api<{ items: GoogleEvent[] }>(
-    session,
-    `/calendars/primary/events?${params.toString()}`,
-  );
-  return (data.items ?? [])
-    .map(googleToAgenda)
-    .filter((e): e is AgendaEvent => e !== null);
+export async function listPrimaryEvents(): Promise<AgendaEvent[]> {
+  const data = await calendarRequest<{ items: GoogleEvent[] }>({ action: 'list' });
+  return (data.items ?? []).map(googleToAgenda).filter((event): event is AgendaEvent => event !== null);
 }
 
 export async function createPrimaryEvent(
-  session: GoogleSession,
   event: { name: string; description?: string; date: string; time?: string },
 ): Promise<{ id: string; htmlLink?: string }> {
-  const payload = agendaToGooglePayload(event);
-  const data = await api<{ id: string; htmlLink?: string }>(
-    session,
-    `/calendars/primary/events`,
-    { method: 'POST', body: JSON.stringify(payload) },
-  );
-  return { id: data.id, htmlLink: data.htmlLink };
+  return calendarRequest({ action: 'create', event: agendaToGooglePayload(event) });
 }
 
-export async function deletePrimaryEvent(
-  session: GoogleSession,
-  googleCalendarId: string,
-): Promise<void> {
-  await api<void>(
-    session,
-    `/calendars/primary/events/${encodeURIComponent(googleCalendarId)}`,
-    { method: 'DELETE' },
-  );
+export async function deletePrimaryEvent(googleCalendarId: string): Promise<void> {
+  await calendarRequest({ action: 'delete', eventId: googleCalendarId });
 }

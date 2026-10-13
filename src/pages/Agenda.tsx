@@ -86,6 +86,7 @@ export default function Agenda() {
     eventsByDate,
     categoriesMap,
     googleConnected,
+    googleLoading,
     googleSyncing,
     googleError,
     connectGoogleCalendar,
@@ -216,7 +217,7 @@ export default function Agenda() {
                   <button
                     type="button"
                     onClick={() => syncGoogleEvents()}
-                    disabled={googleSyncing}
+                    disabled={googleLoading || googleSyncing}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-background/60 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                     aria-label="Sincronizar Google Agenda"
                     title="Sincronizar Google Agenda"
@@ -226,7 +227,7 @@ export default function Agenda() {
                   <button
                     type="button"
                     onClick={() => disconnectGoogleCalendar()}
-                    disabled={googleSyncing}
+                    disabled={googleLoading || googleSyncing}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-background/60 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
                     aria-label="Desconectar Google Agenda"
                     title="Desconectar Google Agenda"
@@ -239,7 +240,7 @@ export default function Agenda() {
               <button
                 type="button"
                 onClick={() => connectGoogleCalendar()}
-                disabled={googleSyncing}
+                disabled={googleLoading || googleSyncing}
                 className={cn(
                   'w-full rounded-2xl border-2 border-primary/70 bg-primary/5 py-3.5 flex items-center justify-center gap-2 transition-all hover:bg-primary/10 active:scale-[0.99]',
                   'shadow-[0_0_20px_hsl(var(--primary)/0.15)] hover:shadow-[0_0_28px_hsl(var(--primary)/0.3)]',
@@ -247,7 +248,7 @@ export default function Agenda() {
               >
                 <CalendarIcon className="w-4 h-4 text-primary" />
                 <span className="font-display text-sm uppercase tracking-wider text-primary">
-                  Conectar com Google Agenda
+                  {googleLoading ? 'Verificando conexão...' : googleSyncing ? 'Conectando...' : 'Conectar com Google Agenda'}
                 </span>
               </button>
             )}

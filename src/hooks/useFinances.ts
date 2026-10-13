@@ -4,6 +4,7 @@ import { toast } from '@/hooks/use-toast';
 import { emit, useBusEvent } from '@/lib/eventBus';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { formatFinanceDate, parseFinanceDate } from '@/lib/financeDates';
 
 export function useFinances() {
   const { user } = useAuth();
@@ -28,8 +29,9 @@ export function useFinances() {
         id: d.id,
         description: d.description,
         category: d.category,
+        subcategory: d.category,
         type: d.type as 'income' | 'expense' | 'investment',
-        date: new Date(d.date),
+        date: parseFinanceDate(d.date),
         amount: Number(d.amount)
       }));
       setTransactions(mapped);
@@ -75,8 +77,7 @@ export function useFinances() {
     if (!user) return;
     
     const txDate = transaction.date ?? new Date();
-    // Extrai o formato YYYY-MM-DD
-    const isoDate = txDate.toISOString().split('T')[0];
+    const isoDate = formatFinanceDate(txDate);
     
     const { data: insertedData, error } = await supabase
       .from('transactions')
@@ -101,8 +102,9 @@ export function useFinances() {
       id: insertedData.id,
       description: insertedData.description,
       category: insertedData.category,
+      subcategory: insertedData.category,
       type: insertedData.type as any,
-      date: new Date(insertedData.date + 'T12:00:00'), // garante que o fuso horário não jogue pro dia anterior
+      date: parseFinanceDate(insertedData.date),
       amount: Number(insertedData.amount)
     };
 
@@ -159,7 +161,7 @@ export function useFinances() {
     if (updates.category !== undefined) payload.category = updates.category;
     if (updates.type !== undefined) payload.type = updates.type;
     if (updates.amount !== undefined) payload.amount = updates.amount;
-    if (updates.date !== undefined) payload.date = updates.date.toISOString().split('T')[0];
+    if (updates.date !== undefined) payload.date = formatFinanceDate(updates.date);
 
     const { error } = await supabase
       .from('transactions')

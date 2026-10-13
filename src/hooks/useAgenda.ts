@@ -12,17 +12,12 @@ import {
 import { useGame } from '@/contexts/GameContext';
 import { WeekDay } from '@/types/game';
 import {
-  GoogleSession,
   createPrimaryEvent,
   deletePrimaryEvent,
-  isConfigured as isGoogleConfigured,
-  listPrimaryEvents,
-  requestAccessToken,
-  revokeAccess,
 } from '@/services/googleCalendar';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-const GOOGLE_SESSION_KEY = 'google_calendar_session_v1';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useTraining } from '@/lib/workoutStorage';
 import { useBusEvent } from '@/lib/eventBus';
 import { toISODate } from '@/lib/missionRewards';
@@ -46,18 +41,6 @@ const TRAINING_INDEX_TO_KEY: Record<number, string> = {
 };
 
 // Remove loadEvents and saveEvents
-
-function loadGoogleSession(): GoogleSession | null {
-  try {
-    const raw = localStorage.getItem(GOOGLE_SESSION_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw) as GoogleSession;
-    if (!s.accessToken || Date.now() >= s.expiresAt - 60_000) return null;
-    return s;
-  } catch {
-    return null;
-  }
-}
 
 interface CreateInput {
   name: string;
@@ -115,10 +98,10 @@ export function useAgenda() {
   const [manualEvents, setManualEvents] = useState<AgendaEvent[]>([]);
   const [trainingLogs, setTrainingLogs] = useState<Record<string, TrainingAgendaLog>>({});
   
-  const [googleSession, setGoogleSession] = useState<GoogleSession | null>(loadGoogleSession);
-  const [googleEvents, setGoogleEvents] = useState<AgendaEvent[]>([]);
-  const [googleSyncing, setGoogleSyncing] = useState(false);
-  const [googleError, setGoogleError] = useState<string | null>(null);
+  const {
+    googleConnected, googleLoading, googleEvents, googleSyncing, googleError,
+    connectGoogleCalendar, disconnectGoogleCalendar, syncGoogleEvents, handleGoogleError,
+  } = useGoogleCalendar();
 
   const [categoriesMap, setCategoriesMap] = useState<Record<string, AgendaCategoryMeta>>(AGENDA_CATEGORIES);
 
@@ -226,70 +209,13 @@ export function useAgenda() {
     };
   }, [fetchTrainingLogs]);
 
-  useEffect(() => {
-    if (googleSession) {
-      localStorage.setItem(GOOGLE_SESSION_KEY, JSON.stringify(googleSession));
-    } else {
-      localStorage.removeItem(GOOGLE_SESSION_KEY);
-    }
-  }, [googleSession]);
-
-  const syncGoogleEvents = useCallback(async () => {
-    if (!googleSession) return;
-    setGoogleSyncing(true);
-    setGoogleError(null);
-    try {
-      const items = await listPrimaryEvents(googleSession);
-      setGoogleEvents(items);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao sincronizar';
-      setGoogleError(msg);
-      if (/expirad|401|invalid/i.test(msg)) setGoogleSession(null);
-    } finally {
-      setGoogleSyncing(false);
-    }
-  }, [googleSession]);
-
-  // Auto-fetch on session change
-  useEffect(() => {
-    if (googleSession) {
-      syncGoogleEvents();
-    } else {
-      setGoogleEvents([]);
-    }
-  }, [googleSession, syncGoogleEvents, user]);
-
-  const connectGoogleCalendar = useCallback(async () => {
-    setGoogleError(null);
-    try {
-      if (!isGoogleConfigured()) {
-        throw new Error('Configure VITE_GOOGLE_CALENDAR_CLIENT_ID para conectar o Google Agenda.');
-      }
-      const session = await requestAccessToken();
-      setGoogleSession(session);
-    } catch (err) {
-      setGoogleError(err instanceof Error ? err.message : 'Falha ao conectar');
-    }
-  }, []);
-
-  const disconnectGoogleCalendar = useCallback(async () => {
-    try {
-      await revokeAccess(googleSession);
-    } catch {
-      // ignore
-    }
-    setGoogleSession(null);
-    setGoogleEvents([]);
-    setGoogleError(null);
-  }, [googleSession]);
-
   const createEvent = useCallback(async (data: CreateInput) => {
     let googleCalendarId: string | null = null;
     let googleCalendarLink: string | undefined;
 
-    if (data.syncWithGoogle && googleSession) {
+    if (data.syncWithGoogle && googleConnected) {
       try {
-        const res = await createPrimaryEvent(googleSession, {
+        const res = await createPrimaryEvent({
           name: data.name,
           description: data.description,
           date: data.date,
@@ -299,7 +225,7 @@ export function useAgenda() {
         googleCalendarLink = res.htmlLink;
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Falha ao criar no Google';
-        setGoogleError(message);
+        handleGoogleError(err);
         throw new Error(message);
       }
     }
@@ -342,7 +268,7 @@ export function useAgenda() {
     if (googleCalendarId) {
       syncGoogleEvents();
     }
-  }, [googleSession, syncGoogleEvents, user]);
+  }, [googleConnected, syncGoogleEvents, user, handleGoogleError]);
 
   const toggleComplete = useCallback(async (id: string) => {
     // Training events are derived from the training plan, but their execution
@@ -463,18 +389,18 @@ export function useAgenda() {
   const deleteEvent = useCallback(async (id: string) => {
     const target = manualEvents.find((e) => e.id === id);
     if (target?.googleCalendarId) {
-      if (!googleSession) {
+      if (!googleConnected) {
         const message = 'Reconecte o Google Agenda antes de excluir este evento sincronizado.';
-        setGoogleError(message);
+        handleGoogleError(new Error(message));
         throw new Error(message);
       }
 
       try {
-        await deletePrimaryEvent(googleSession, target.googleCalendarId);
+        await deletePrimaryEvent(target.googleCalendarId);
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Falha ao remover do Google';
         if (!/404|not found/i.test(message)) {
-          setGoogleError(message);
+          handleGoogleError(err);
           throw new Error(message);
         }
       }
@@ -483,7 +409,7 @@ export function useAgenda() {
     setManualEvents((prev) => prev.filter((e) => e.id !== id));
     if (user) await supabase.from('agenda_events').delete().eq('id', id);
     if (target?.googleCalendarId) syncGoogleEvents();
-  }, [manualEvents, googleSession, syncGoogleEvents, user]);
+  }, [manualEvents, googleConnected, syncGoogleEvents, user, handleGoogleError]);
 
   // Missions no longer appear in the Agenda — they live in the "Missões Diárias" section.
   const derivedMissionEvents = useMemo<AgendaEvent[]>(() => [], []);
@@ -591,7 +517,8 @@ export function useAgenda() {
     categoriesMap,
     categoriesList: Object.values(categoriesMap),
     // Google
-    googleConnected: Boolean(googleSession),
+    googleConnected,
+    googleLoading,
     googleSyncing,
     googleError,
     connectGoogleCalendar,

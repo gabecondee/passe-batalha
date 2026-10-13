@@ -1,1 +1,5 @@
-project_id = "sttlbcbtllbbwskexpwz"
+project_id = "rxkppgpujtxluqyygbvk"
+
+# OAuth callback is public; every POST verifies the user's JWT inside the function.
+[functions.google-calendar]
+verify_jwt = false

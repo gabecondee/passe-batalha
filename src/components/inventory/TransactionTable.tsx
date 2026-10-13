@@ -2,6 +2,7 @@ import { Transaction, TransactionType, getCategoryDef } from '@/types/finance';
 import { Button } from '@/components/ui/button';
 import { Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { format } from 'date-fns';
 
 interface TransactionTableProps {
   transactions: Transaction[];
@@ -33,7 +34,7 @@ export function TransactionTable({ transactions, type, onEdit }: TransactionTabl
 
       {/* Rows */}
       {transactions.length === 0 ? (
-        <div className="py-6" />
+        <p className="py-6 text-center text-sm text-muted-foreground">Nenhum lançamento nos filtros selecionados.</p>
       ) : (
         <div className="divide-y divide-border">
           {transactions.map((t) => {
@@ -49,7 +50,10 @@ export function TransactionTable({ transactions, type, onEdit }: TransactionTabl
                 >
                   <Pencil className="w-4 h-4" />
                 </Button>
-                <span className="truncate text-sm">{t.description}</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm">{t.description}</p>
+                  <p className="text-xs text-muted-foreground">{format(t.date, 'dd/MM/yyyy')}</p>
+                </div>
                 <span className={cn('font-display text-sm text-right whitespace-nowrap', valueColor)}>
                   {formatCurrency(t.amount)}
                 </span>

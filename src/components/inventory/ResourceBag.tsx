@@ -26,10 +26,11 @@ import { Calendar } from '@/components/ui/calendar';
 import { DateRange } from 'react-day-picker';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { isInFinancePeriod } from '@/lib/financeDates';
 
 const INVEST_COLOR = '#eca634';
 
-type PeriodKey = 'current' | 'custom';
+type PeriodKey = 'all' | 'current' | 'custom';
 
 interface SectionProps {
   title: string;
@@ -42,7 +43,6 @@ interface SectionProps {
   transactions: Transaction[];
   categories: CategoryDef[];
   type: TransactionType;
-  total: number;
   formatCurrency: (v: number) => string;
   onNew: () => void;
   onEdit: (t: Transaction) => void;
@@ -61,7 +61,6 @@ function Section({
   transactions,
   categories,
   type,
-  total,
   formatCurrency,
   onNew,
   onEdit,
@@ -142,7 +141,7 @@ function Section({
             className={cn('font-display ml-2', colorClass)}
             style={headerColorStyle}
           >
-            {formatCurrency(total)}
+            {formatCurrency(visible.reduce((sum, transaction) => sum + transaction.amount, 0))}
           </span>
         </div>
       </div>
@@ -159,7 +158,7 @@ export function ResourceBag() {
 
   const [editing, setEditing] = useState<Transaction | null>(null);
 
-  const [period, setPeriod] = useState<PeriodKey>('current');
+  const [period, setPeriod] = useState<PeriodKey>('all');
   const [range, setRange] = useState<DateRange | undefined>();
   const [rangeOpen, setRangeOpen] = useState(false);
 
@@ -171,19 +170,7 @@ export function ResourceBag() {
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
   const filtered = useMemo(() => {
-    return transactions.filter((t) => {
-      const d = new Date(t.date);
-      if (period === 'current') {
-        const now = new Date();
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-      }
-      if (period === 'custom') {
-        if (range?.from && d < new Date(range.from.setHours(0, 0, 0, 0))) return false;
-        if (range?.to && d > new Date(new Date(range.to).setHours(23, 59, 59, 999))) return false;
-        return true;
-      }
-      return true;
-    });
+    return transactions.filter((t) => isInFinancePeriod(t.date, period, range));
   }, [transactions, period, range]);
 
   const incomes = filtered.filter((t) => t.type === 'income');
@@ -217,6 +204,10 @@ export function ResourceBag() {
         <h3 className="font-display uppercase tracking-[0.2em] text-primary text-sm mb-4">
           Resumo Geral
         </h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          {period === 'all' ? 'Todos os lançamentos' : period === 'current' ? 'Lançamentos do mês atual' : range?.from ? `Lançamentos a partir de ${format(range.from, 'dd/MM/yyyy')}${range.to ? ` até ${format(range.to, 'dd/MM/yyyy')}` : ''}` : 'Todos os lançamentos — selecione um intervalo'}.
+          {' '}Os totais gerais consideram todas as categorias do período.
+        </p>
         <div className="grid grid-cols-2 gap-4">
           {summaryCards.map((c) => {
             const Icon = c.Icon;
@@ -235,10 +226,21 @@ export function ResourceBag() {
         </div>
       </div>
 
-      {/* Period selector: Mês Atual + Personalizado */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button
+          onClick={() => setPeriod('all')}
+          aria-pressed={period === 'all'}
+          className={cn(
+            'flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm transition-colors',
+            period === 'all' ? 'border-primary/60 bg-primary/10 text-primary' : 'border-border/60 bg-card/40 text-muted-foreground hover:text-foreground',
+          )}
+        >
+          <CalendarIcon className="w-4 h-4" />
+          Todo o período
+        </button>
         <button
           onClick={() => setPeriod('current')}
+          aria-pressed={period === 'current'}
           className={cn(
             'flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm transition-colors',
             period === 'current'
@@ -259,6 +261,7 @@ export function ResourceBag() {
         >
           <PopoverTrigger asChild>
             <button
+              aria-pressed={period === 'custom'}
               className={cn(
                 'flex items-center justify-center gap-2 px-4 py-3 rounded-xl border text-sm transition-colors',
                 period === 'custom'
@@ -293,7 +296,6 @@ export function ResourceBag() {
         transactions={incomes}
         categories={INCOME_CATEGORIES}
         type="income"
-        total={totalIncome}
         formatCurrency={formatCurrency}
         onNew={() => setIncomeDialogOpen(true)}
         onEdit={setEditing}
@@ -309,7 +311,6 @@ export function ResourceBag() {
         transactions={expenses}
         categories={EXPENSE_CATEGORIES}
         type="expense"
-        total={totalExpenses}
         formatCurrency={formatCurrency}
         onNew={() => setExpenseDialogOpen(true)}
         onEdit={setEditing}
@@ -329,7 +330,6 @@ export function ResourceBag() {
         transactions={investments}
         categories={INVESTMENT_CATEGORIES}
         type="investment"
-        total={totalInvestments}
         formatCurrency={formatCurrency}
         onNew={() => setInvestDialogOpen(true)}
         onEdit={setEditing}
