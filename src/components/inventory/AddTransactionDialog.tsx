@@ -5,12 +5,14 @@ import {
   INCOME_CATEGORIES,
   EXPENSE_CATEGORIES,
   INVESTMENT_CATEGORIES,
+  getCategoryDef,
 } from '@/types/finance';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -43,7 +45,7 @@ interface AddTransactionDialogProps {
 const INVEST_COLOR = '#eca634';
 
 export function AddTransactionDialog({
-  type,
+  type: defaultType,
   open,
   onOpenChange,
   onAdd,
@@ -52,6 +54,7 @@ export function AddTransactionDialog({
   onDelete,
 }: AddTransactionDialogProps) {
   const isEdit = !!initial;
+  const [type, setType] = useState<TransactionType>(defaultType);
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [amount, setAmount] = useState('');
@@ -68,9 +71,10 @@ export function AddTransactionDialog({
 
   useEffect(() => {
     if (!open) return;
+    setType(initial?.type ?? defaultType);
     if (initial) {
       setDescription(initial.description);
-      const exists = categories.some((c) => c.value === initial.category);
+      const exists = !!getCategoryDef(initial.type, initial.category);
       setCategory(exists ? initial.category : '');
       setAmount(String(initial.amount));
       setDate(new Date(initial.date));
@@ -80,7 +84,7 @@ export function AddTransactionDialog({
       setAmount('');
       setDate(new Date());
     }
-  }, [open, initial]);
+  }, [open, initial, defaultType]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,7 +139,7 @@ export function AddTransactionDialog({
 
   const titleLabel = isEdit
     ? (isIncome ? 'Editar Entrada' : isInvestment ? 'Editar Investimento' : 'Editar Saída')
-    : (isIncome ? 'Nova Entrada' : isInvestment ? 'Novo Investimento' : 'Nova Saída');
+    : 'Novo lançamento';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -151,9 +155,28 @@ export function AddTransactionDialog({
             )}
             <span>{titleLabel}</span>
           </DialogTitle>
+          <DialogDescription className="sr-only">Informe a descrição, categoria, data e valor do lançamento.</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {!isEdit && (
+            <fieldset>
+              <legend className="text-sm font-medium mb-2">Tipo de lançamento</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: 'income', label: 'Entrada' },
+                  { value: 'expense', label: 'Saída' },
+                  { value: 'investment', label: 'Investimento' },
+                ] as const).map(option => (
+                  <Button key={option.value} type="button" variant={type === option.value ? 'default' : 'outline'}
+                    className="px-1 text-xs" aria-pressed={type === option.value}
+                    onClick={() => { setType(option.value); setCategory(''); }}>
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+            </fieldset>
+          )}
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
             <Input
