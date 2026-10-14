@@ -491,7 +491,13 @@ export default function Dashboard() {
                         </div>
                       </div>
                     ) : (
-                      <p className="text-[10px] text-muted-foreground text-center">✅ Ação de hoje registrada — volte amanhã</p>
+                      <p className="text-[10px] text-muted-foreground text-center">
+                        {battle.days.find(d => d.day === battle.currentDay)?.status === 'success'
+                          ? '✅ Golpe de hoje confirmado — volte amanhã'
+                          : battle.days.find(d => d.day === battle.currentDay)?.status === 'fail'
+                            ? 'Falha de hoje registrada — volte amanhã'
+                            : 'Nenhuma ação disponível. Confira o calendário do chefão.'}
+                      </p>
                     )}
                   </div>
                 );

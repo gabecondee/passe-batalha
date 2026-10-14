@@ -1,4 +1,7 @@
-import React, { createContext, useContext, useState, useCallback, useMemo, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 import { Boss, AttributeArea } from '@/types/boss';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +20,7 @@ export interface BattleDay {
 }
 
 export interface BossBattle {
+  id?: string;
   bossId: string;
   status: BattleStatus;
   startedAt: string;
@@ -216,10 +220,16 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [bosses, setBosses] = useState<Boss[]>([]);
   const [battles, setBattles] = useState<Record<string, BossBattle>>({});
+  const recording = useRef(false);
+  const [savingHit, setSavingHit] = useState(false);
+  const [failedHit, setFailedHit] = useState<{ bossId: string; day: number; success: boolean } | null>(null);
+  const loadVersion = useRef(0);
+  const starting = useRef(false);
+  const sessionUser = useRef(user?.id);
+  sessionUser.current = user?.id;
 
-  const fetchData = useCallback(async () => {
-    setBattles({});
-    setBosses([]);
+  const fetchData = useCallback(async (attempt = 0): Promise<void> => {
+    const version = ++loadVersion.current;
     try {
       // 1. Fetch system bosses AND user custom bosses from Supabase
       let bossesQuery = supabase.from('custom_bosses').select('*');
@@ -228,6 +238,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         : bossesQuery.eq('is_system', true);
       const { data: bossesData, error: bossesErr } = await bossesQuery
         .order('created_at', { ascending: false });
+      if (bossesErr) throw bossesErr;
 
       let fetchedBosses: Boss[] = [];
       if (!bossesErr && bossesData) {
@@ -245,7 +256,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
           defeated: false,
           xpReward: Number(d.xp_reward) || 300,
           penaltyXp: Number(d.penalty_xp) || 100,
-          maxFails: Number(d.max_fails) || 3,
+          maxFails: d.max_fails == null ? 3 : Number(d.max_fails),
           durationDays: Number(d.duration_days) || 30,
           rules: d.rules || {
             penaltyAreas: [d.attribute_area || 'Mental'],
@@ -259,6 +270,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
           dailyTasks: d.daily_tasks || [],
         }));
       }
+      if (version !== loadVersion.current) return;
       setBosses(fetchedBosses);
 
       // 2. Fetch user boss battles if logged in
@@ -274,10 +286,14 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
             new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime()
           );
 
-          for (const b of sorted) {
+          if (version !== loadVersion.current) return;
+          // Only normalize the latest battle for each boss, never an old run.
+          const latest = new Map(sorted.map(b => [b.boss_id, b]));
+          for (const b of latest.values()) {
             const days = (b.days_history as BattleDay[]) || [];
             const boss = fetchedBosses.find(item => item.id === b.boss_id);
             const battle: BossBattle = {
+              id: b.id,
               bossId: b.boss_id,
               status: b.status as BattleStatus,
               startedAt: b.started_at,
@@ -295,20 +311,29 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
             hydratedBattles[b.boss_id] = normalized.battle;
 
             if (normalized.changed) {
-              supabase.from('boss_battles')
+              const { data: updated, error } = await supabase.from('boss_battles')
                 .update({
                   days_history: normalized.battle.days,
                   status: normalized.battle.status,
                 })
                 .eq('user_id', user.id)
-                .eq('boss_id', b.boss_id)
+                .eq('id', b.id)
+                .eq('days_history', JSON.stringify(b.days_history))
                 .eq('status', 'active')
-                .then(({ error }) => {
-                  if (error) console.error('Erro ao sincronizar dias perdidos do boss:', error);
-                });
+                .select('id').maybeSingle();
+              if (version !== loadVersion.current) return;
+              if (error) {
+                console.error('Erro ao sincronizar dias perdidos do boss:', error);
+                hydratedBattles[b.boss_id] = battle;
+              } else if (!updated) {
+                // A hit changed the history after our read; reload instead of
+                // showing the stale automatic failure we just calculated.
+                if (attempt < 2) return fetchData(attempt + 1);
+                return;
+              }
             }
           }
-          setBattles(hydratedBattles);
+          if (version === loadVersion.current) setBattles(hydratedBattles);
         }
       }
     } catch (err) {
@@ -317,43 +342,17 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   }, [user]);
 
   useEffect(() => {
-    fetchData();
+    setBattles({});
+    setBosses([]);
+    setFailedHit(null);
+    void fetchData();
   }, [fetchData]);
 
   useEffect(() => {
+    // Read the server again on return; never persist an old in-memory history.
     const syncActiveBattles = () => {
-      setBattles(prev => {
-        let changed = false;
-        const next = { ...prev };
-
-        Object.entries(prev).forEach(([bossId, battle]) => {
-          const boss = bosses.find(item => item.id === bossId);
-          const normalized = normalizeBattleForToday(battle, boss);
-          if (!normalized.changed) return;
-
-          changed = true;
-          next[bossId] = normalized.battle;
-
-          if (user) {
-            supabase.from('boss_battles')
-              .update({
-                days_history: normalized.battle.days,
-                status: normalized.battle.status,
-              })
-              .eq('user_id', user.id)
-              .eq('boss_id', bossId)
-              .eq('status', 'active')
-              .then(({ error }) => {
-                if (error) console.error('Erro ao sincronizar batalha ativa do boss:', error);
-              });
-          }
-        });
-
-        return changed ? next : prev;
-      });
+      if (!recording.current && !starting.current) void fetchData();
     };
-
-    syncActiveBattles();
     const interval = window.setInterval(syncActiveBattles, 60_000);
     window.addEventListener('focus', syncActiveBattles);
 
@@ -361,7 +360,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       window.clearInterval(interval);
       window.removeEventListener('focus', syncActiveBattles);
     };
-  }, [bosses, user]);
+  }, [fetchData]);
 
   const getBattle = useCallback((bossId: string): BossBattle => {
     return battles[bossId] || defaultBattle(bossId);
@@ -406,12 +405,13 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     return Object.values(battles).some(b => b.status === 'active' && bosses.some(boss => boss.id === b.bossId));
   }, [battles, bosses]);
 
-  const startBattle = useCallback((bossId: string, durationDays?: number) => {
+  const startBattle = useCallback(async (bossId: string, durationDays?: number) => {
+    if (starting.current || !user) return;
     const boss = bosses.find(b => b.id === bossId);
     if (!boss) return;
 
     const hasActive = Object.values(battles).some(
-      b => b.status === 'active' && b.bossId !== bossId && bosses.some(boss => boss.id === b.bossId)
+      b => b.status === 'active' && bosses.some(boss => boss.id === b.bossId)
     );
     if (hasActive) {
       toast.error('Você já possui um chefão em batalha. Finalize ou abandone a batalha atual antes de iniciar outra.');
@@ -431,22 +431,27 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       losses: 0,
     };
 
-    setBattles(prev => ({ ...prev, [bossId]: newBattle }));
-
-    if (user) {
-      supabase.from('boss_battles').insert({
+    starting.current = true;
+    try {
+      const { data, error } = await supabase.from('boss_battles').insert({
         user_id: user.id,
         boss_id: bossId,
         status: 'active',
         started_at: newBattle.startedAt,
         duration_days: duration,
         days_history: newBattle.days,
-      }).then(({ error }) => {
-        if (error) console.error('Erro ao inserir boss_battles:', error);
-      });
+      }).select('id').single();
+      if (sessionUser.current !== user.id) return;
+      if (error || !data) throw error || new Error('Batalha não confirmada.');
+      ++loadVersion.current;
+      setBattles(prev => ({ ...prev, [bossId]: { ...newBattle, id: data.id } }));
+      toast.success('⚔️ Batalha iniciada! Boa sorte, guerreiro!');
+    } catch (error) {
+      console.error('Erro ao iniciar batalha:', error);
+      toast.error('Não foi possível iniciar a batalha. Tente novamente.');
+    } finally {
+      starting.current = false;
     }
-
-    toast.success('⚔️ Batalha iniciada! Boa sorte, guerreiro!');
   }, [battles, bosses, user]);
 
   const recordDayAction = useCallback(async (bossId: string, day: number, success: boolean): Promise<boolean> => {
@@ -455,84 +460,128 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    const currentBattle = battles[bossId];
-    const boss = bosses.find(b => b.id === bossId);
-    const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
-    const battle = normalized?.battle;
+    if (recording.current) return false;
+    recording.current = true;
+    ++loadVersion.current;
+    setSavingHit(true);
+    setFailedHit(null);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      const localBattle = battles[bossId];
+      if (!localBattle?.id) throw new Error('Batalha ainda não confirmada.');
+      const { data: row, error: readError } = await supabase.from('boss_battles')
+        .select('*').eq('user_id', user.id).eq('id', localBattle.id)
+        .abortSignal(controller.signal).maybeSingle();
+      if (readError || !row) throw readError || new Error('Batalha não encontrada.');
+      if (sessionUser.current !== user.id) return false;
+      const currentBattle: BossBattle = {
+        ...localBattle, days: row.days_history as BattleDay[],
+        status: row.status as BattleStatus, startedAt: row.started_at,
+        durationDays: row.duration_days,
+      };
+      const boss = bosses.find(b => b.id === bossId);
+      const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
+      const battle = normalized?.battle;
 
-    if (!battle || battle.status !== 'active') return false;
-
-    if (day !== battle.currentDay) {
-      toast.info('Este golpe não pertence mais ao dia atual da batalha.');
-      if (normalized?.changed) {
-        setBattles(prev => ({ ...prev, [bossId]: battle }));
+      const existingDay = currentBattle.days.find(d => d.day === day);
+      if (existingDay?.status !== 'pending') {
+        setBattles(prev => ({ ...prev, [bossId]: normalized!.battle }));
+        if (existingDay?.status === (success ? 'success' : 'fail')) {
+          toast.success('Ação já confirmada.');
+          return true;
+        }
+        toast.info('Este dia já possui outro resultado registrado.');
+        return false;
       }
+      if (!battle || battle.status !== 'active') {
+        setBattles(prev => ({ ...prev, [bossId]: battle || currentBattle }));
+        toast.info('Esta batalha já foi encerrada.');
+        return false;
+      }
+
+      if (day !== battle.currentDay) {
+        toast.info('Este golpe não pertence mais ao dia atual da batalha.');
+        if (normalized?.changed) {
+          setBattles(prev => ({ ...prev, [bossId]: battle }));
+        }
+        return false;
+      }
+
+      const newDays = battle.days.map(d =>
+        d.day === day
+          ? { ...d, status: (success ? 'success' : 'fail') as DayStatus, completedAt: new Date().toISOString() }
+          : d
+      );
+
+      const successCount = newDays.filter(d => d.status === 'success').length;
+      const failCount = newDays.filter(d => d.status === 'fail').length;
+      const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
+
+      let newStatus: BattleStatus = 'active';
+      let wins = battle.wins;
+      let losses = battle.losses;
+      const currentDay = battle.currentDay;
+
+      const completedCount = successCount + failCount;
+      const remainingDays = battle.durationDays - completedCount;
+
+      if (failCount > maxFails) {
+        newStatus = 'lost';
+        losses += 1;
+      } else if (remainingDays === 0) {
+        newStatus = 'won';
+        wins += 1;
+      }
+
+      const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
+
+      const { data, error } = await supabase.from('boss_battles')
+        .update({
+          days_history: newDays,
+          status: newStatus,
+        })
+        .eq('user_id', user.id)
+        .eq('id', localBattle.id)
+        // Compare-and-swap: a concurrent hit/sync must never be overwritten.
+        .eq('days_history', JSON.stringify(row.days_history))
+        .eq('status', 'active')
+        .abortSignal(controller.signal)
+        .select('boss_id')
+        .maybeSingle();
+
+      if (error || !data) {
+        throw error || new Error('A batalha mudou durante o registro.');
+      }
+      if (sessionUser.current !== user.id) return false;
+
+      setBattles(prev => ({
+        ...prev,
+        [bossId]: nextBattle,
+      }));
+
+      if (newStatus === 'lost') {
+        toast.error('💀 Você foi derrotado... Tente novamente!');
+      } else if (newStatus === 'won') {
+        toast.success('🏆 Boss derrotado! Você venceu a batalha!');
+      } else if (success) {
+        toast.success('⚔️ Golpe aplicado! Continue firme!');
+      } else {
+        toast.warning('😤 Falha registrada. Não desista!');
+      }
+
+      // Emite evento para que useAchievementsData reavalie conquistas de boss_hits
+      emit({ type: 'boss:hit', bossId, success });
+      return true;
+    } catch (error) {
+      console.error('Erro ao confirmar golpe:', error);
+      if (sessionUser.current === user.id) setFailedHit({ bossId, day, success });
       return false;
+    } finally {
+      window.clearTimeout(timeout);
+      recording.current = false;
+      setSavingHit(false);
     }
-
-    const newDays = battle.days.map(d =>
-      d.day === day
-        ? { ...d, status: (success ? 'success' : 'fail') as DayStatus, completedAt: new Date().toISOString() }
-        : d
-    );
-
-    const successCount = newDays.filter(d => d.status === 'success').length;
-    const failCount = newDays.filter(d => d.status === 'fail').length;
-    const maxFails = boss?.maxFails ?? boss?.rules?.maxFails ?? 3;
-
-    let newStatus: BattleStatus = 'active';
-    let wins = battle.wins;
-    let losses = battle.losses;
-    const currentDay = Math.min(day + 1, battle.durationDays);
-
-    const completedCount = successCount + failCount;
-    const remainingDays = battle.durationDays - completedCount;
-
-    if (failCount > maxFails) {
-      newStatus = 'lost';
-      losses += 1;
-    } else if (remainingDays === 0) {
-      newStatus = 'won';
-      wins += 1;
-    }
-
-    const nextBattle = { ...battle, days: newDays, status: newStatus, wins, losses, currentDay };
-
-    const { data, error } = await supabase.from('boss_battles')
-      .update({
-        days_history: newDays,
-        status: newStatus,
-      })
-      .eq('user_id', user.id)
-      .eq('boss_id', bossId)
-      .eq('status', 'active')
-      .select('boss_id')
-      .maybeSingle();
-
-    if (error || !data) {
-      console.error('Erro ao registrar golpe do boss:', error);
-      toast.error('Não foi possível salvar o golpe. Verifique sua conexão e tente novamente.');
-      return false;
-    }
-
-    setBattles(prev => ({
-      ...prev,
-      [bossId]: nextBattle,
-    }));
-
-    if (newStatus === 'lost') {
-      toast.error('💀 Você foi derrotado... Tente novamente!');
-    } else if (newStatus === 'won') {
-      toast.success('🏆 Boss derrotado! Você venceu a batalha!');
-    } else if (success) {
-      toast.success('⚔️ Golpe aplicado! Continue firme!');
-    } else {
-      toast.warning('😤 Falha registrada. Não desista!');
-    }
-
-    // Emite evento para que useAchievementsData reavalie conquistas de boss_hits
-    emit({ type: 'boss:hit', bossId, success });
-    return true;
   }, [battles, bosses, user]);
 
   const getProgress = useCallback((bossId: string): number => {
@@ -578,7 +627,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
         supabase.from('boss_battles')
           .update({ status: 'lost' })
           .eq('user_id', user.id)
-          .eq('boss_id', bossId)
+          .eq('id', battle.id)
           .eq('status', 'active').then();
       }
 
@@ -636,6 +685,29 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
   return (
     <BossContext.Provider value={value}>
       {children}
+      <Dialog open={savingHit || failedHit !== null} onOpenChange={open => {
+        if (!open && !savingHit) setFailedHit(null);
+      }}>
+        <DialogContent onEscapeKeyDown={event => savingHit && event.preventDefault()}
+          onPointerDownOutside={event => event.preventDefault()}
+          onInteractOutside={event => savingHit && event.preventDefault()}
+          className={savingHit ? '[&>button]:hidden' : ''}>
+          <DialogHeader>
+            <DialogTitle>{savingHit ? 'Salvando golpe' : 'Não conseguimos confirmar o golpe'}</DialogTitle>
+            <DialogDescription>
+              {savingHit ? 'Aguarde a confirmação do seu registro.' : 'Verifique sua conexão e tente novamente. Vamos conferir se o registro já foi salvo antes de repetir.'}
+            </DialogDescription>
+          </DialogHeader>
+          {savingHit ? <div role="status" className="flex items-center justify-center gap-3 py-6">
+            <Loader2 className="h-6 w-6 animate-spin" aria-hidden="true" /> Confirmando…
+          </div> : <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setFailedHit(null)}>Fechar</Button>
+            <Button onClick={() => {
+              if (failedHit) void recordDayAction(failedHit.bossId, failedHit.day, failedHit.success);
+            }}>Tentar novamente</Button>
+          </div>}
+        </DialogContent>
+      </Dialog>
     </BossContext.Provider>
   );
 }
