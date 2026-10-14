@@ -5,10 +5,10 @@ import { GoogleCalendarError } from '@/services/googleCalendar';
 
 const mocks = vi.hoisted(() => ({
   user: { id: 'user-one' } as { id: string } | null,
-  status: vi.fn(), list: vi.fn(), disconnect: vi.fn(), start: vi.fn(),
+  status: vi.fn(), list: vi.fn(), disconnect: vi.fn(), start: vi.fn(), toast: vi.fn(),
 }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: mocks.user }) }));
-vi.mock('@/hooks/use-toast', () => ({ toast: vi.fn() }));
+vi.mock('@/hooks/use-toast', () => ({ toast: mocks.toast }));
 vi.mock('@/services/googleCalendar', () => ({
   GoogleCalendarError: class extends Error { constructor(message: string, public code?: string) { super(message); } },
   getGoogleConnection: mocks.status, listPrimaryEvents: mocks.list,
@@ -84,5 +84,32 @@ describe('Google connection across devices and sessions', () => {
     await act(async () => { finish([{ id: 'stale' }]); await syncing; });
     expect(result.current.googleConnected).toBe(false);
     expect(result.current.googleEvents).toEqual([]);
+  });
+
+  it('shows progress, ignores repeated clicks and confirms disconnection', async () => {
+    const { result } = renderHook(() => useGoogleCalendar());
+    await waitFor(() => expect(result.current.googleSyncing).toBe(false));
+    let finish!: () => void;
+    mocks.disconnect.mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
+    let pending!: Promise<void>;
+    act(() => { pending = result.current.disconnectGoogleCalendar(); });
+    expect(result.current.googleDisconnecting).toBe(true);
+    await act(() => result.current.disconnectGoogleCalendar());
+    expect(mocks.disconnect).toHaveBeenCalledTimes(1);
+    await act(async () => { finish(); await pending; });
+    expect(result.current.googleDisconnecting).toBe(false);
+    expect(result.current.googleConnected).toBe(false);
+    expect(mocks.toast).toHaveBeenCalledWith({ title: 'Google Agenda desconectado' });
+  });
+
+  it('reports a failed disconnect and keeps the connection available for retry', async () => {
+    const { result } = renderHook(() => useGoogleCalendar());
+    await waitFor(() => expect(result.current.googleSyncing).toBe(false));
+    mocks.disconnect.mockRejectedValueOnce(new Error('O Google não respondeu'));
+    await act(() => result.current.disconnectGoogleCalendar());
+    expect(result.current.googleConnected).toBe(true);
+    expect(result.current.googleDisconnecting).toBe(false);
+    expect(result.current.googleError).toBe('O Google não respondeu');
+    expect(mocks.toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive' }));
   });
 });

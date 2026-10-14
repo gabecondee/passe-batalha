@@ -9,6 +9,7 @@ export default function IntegrationsSettings() {
     googleConnected,
     googleLoading,
     googleSyncing,
+    googleDisconnecting,
     googleError,
     connectGoogleCalendar,
     disconnectGoogleCalendar,
@@ -41,7 +42,7 @@ export default function IntegrationsSettings() {
                   )}
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  Sincronize seus compromissos e lembretes. A conexão fica vinculada à sua conta e funciona nos seus dispositivos.
+                  Sincronize seus compromissos e lembretes com o Google Agenda.
                 </p>
               </div>
               <div>
@@ -50,10 +51,11 @@ export default function IntegrationsSettings() {
                     variant="outline"
                     size="sm"
                     onClick={disconnectGoogleCalendar}
-                    disabled={googleLoading || googleSyncing}
+                    disabled={googleLoading || googleDisconnecting}
                     className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 text-xs"
                   >
-                    Desconectar
+                    {googleDisconnecting && <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+                    {googleDisconnecting ? 'Desconectando...' : 'Desconectar'}
                   </Button>
                 ) : (
                   <Button

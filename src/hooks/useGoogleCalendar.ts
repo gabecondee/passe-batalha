@@ -16,6 +16,8 @@ export function useGoogleCalendar() {
   const [googleEvents, setGoogleEvents] = useState<AgendaEvent[]>([]);
   const [googleLoading, setGoogleLoading] = useState(true);
   const [googleSyncing, setGoogleSyncing] = useState(false);
+  const [googleDisconnecting, setGoogleDisconnecting] = useState(false);
+  const disconnecting = useRef(false);
   const [googleError, setGoogleError] = useState<string | null>(null);
   const version = useRef(0);
   const running = useRef(false);
@@ -41,6 +43,7 @@ export function useGoogleCalendar() {
       const status = await getGoogleConnection();
       if (!stillCurrent()) return;
       setConnectedUser(status.connected ? userId : null);
+      setGoogleLoading(false);
       if (!status.connected) {
         setGoogleEvents([]);
         if (status.needsReconnect) setGoogleError('A autorização do Google expirou ou foi revogada. Conecte novamente.');
@@ -69,6 +72,8 @@ export function useGoogleCalendar() {
     setGoogleError(null);
     setGoogleLoading(Boolean(userId));
     setGoogleSyncing(false);
+    setGoogleDisconnecting(false);
+    disconnecting.current = false;
     // Legacy browser tokens cannot be upgraded to an offline authorization.
     localStorage.removeItem('google_calendar_session_v1');
     if (userId) void refreshGoogle();
@@ -96,7 +101,7 @@ export function useGoogleCalendar() {
     if (!result) return;
     url.searchParams.delete('google_calendar');
     window.history.replaceState(window.history.state, '', url);
-    if (result === 'connected') toast({ title: 'Google Agenda conectado', description: 'A conexão está vinculada à sua conta e disponível nos seus dispositivos.' });
+    if (result === 'connected') toast({ title: 'Google Agenda conectado' });
     if (result === 'cancelled') setGoogleError('Conexão cancelada. Você pode tentar novamente.');
     if (result === 'error') setGoogleError('Não foi possível concluir a autorização. Tente conectar novamente.');
   }, []);
@@ -121,7 +126,10 @@ export function useGoogleCalendar() {
   }, [userId, handleGoogleError]);
 
   const disconnectGoogleCalendar = useCallback(async () => {
-    if (!userId) return;
+    if (!userId || disconnecting.current) return;
+    disconnecting.current = true;
+    setGoogleDisconnecting(true);
+    setGoogleError(null);
     // Ignore a pending sync so it cannot restore stale state after disconnecting.
     version.current += 1;
     running.current = true;
@@ -132,19 +140,25 @@ export function useGoogleCalendar() {
       setConnectedUser(null);
       setGoogleEvents([]);
       setGoogleError(null);
+      toast({ title: 'Google Agenda desconectado' });
     } catch (error) {
-      if (currentUser.current === userId) handleGoogleError(error);
+      if (currentUser.current === userId) {
+        const message = handleGoogleError(error);
+        toast({ title: 'Não foi possível desconectar', description: message, variant: 'destructive' });
+      }
     } finally {
       if (currentUser.current === userId) {
         running.current = false;
         setGoogleLoading(false);
         setGoogleSyncing(false);
+        setGoogleDisconnecting(false);
+        disconnecting.current = false;
       }
     }
   }, [userId, handleGoogleError]);
 
   return {
-    googleConnected, googleLoading, googleSyncing, googleError,
+    googleConnected, googleLoading, googleSyncing, googleDisconnecting, googleError,
     googleEvents: googleConnected ? googleEvents : [],
     connectGoogleCalendar, disconnectGoogleCalendar,
     syncGoogleEvents: refreshGoogle, handleGoogleError,

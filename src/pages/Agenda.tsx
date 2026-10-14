@@ -88,6 +88,7 @@ export default function Agenda() {
     googleConnected,
     googleLoading,
     googleSyncing,
+    googleDisconnecting,
     googleError,
     connectGoogleCalendar,
     disconnectGoogleCalendar,
@@ -227,12 +228,12 @@ export default function Agenda() {
                   <button
                     type="button"
                     onClick={() => disconnectGoogleCalendar()}
-                    disabled={googleLoading || googleSyncing}
+                    disabled={googleLoading || googleDisconnecting}
                     className="flex h-8 w-8 items-center justify-center rounded-lg border border-red-500/30 bg-background/60 text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50"
-                    aria-label="Desconectar Google Agenda"
-                    title="Desconectar Google Agenda"
+                    aria-label={googleDisconnecting ? 'Desconectando Google Agenda' : 'Desconectar Google Agenda'}
+                    title={googleDisconnecting ? 'Desconectando...' : 'Desconectar Google Agenda'}
                   >
-                    <LogOut className="h-4 w-4" />
+                    {googleDisconnecting ? <RefreshCw className="h-4 w-4 animate-spin" /> : <LogOut className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
@@ -252,6 +253,7 @@ export default function Agenda() {
                 </span>
               </button>
             )}
+            {googleError && <p role="alert" className="mt-2 text-xs text-red-400">{googleError}</p>}
           </motion.div>
 
           {/* Today section — collapsible */}

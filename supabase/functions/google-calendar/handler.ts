@@ -153,10 +153,15 @@ export async function handleRequest(req: Request): Promise<Response> {
     if (body.action === 'disconnect') {
       if (connection) {
         const token = await decryptToken(connection.refresh_token, await key(), userId);
-        const response = await fetch('https://oauth2.googleapis.com/revoke', {
-          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: new URLSearchParams({ token }),
-        });
+        let response: Response;
+        try {
+          response = await fetch('https://oauth2.googleapis.com/revoke', {
+            method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ token }), signal: AbortSignal.timeout(8_000),
+          });
+        } catch {
+          throw new CalendarError('O Google não respondeu à desconexão. Tente novamente.', 502);
+        }
         if (!response.ok && response.status !== 400) throw new CalendarError('Não foi possível desconectar. Tente novamente.', 502);
         // Disconnect applies to the account even if another device just refreshed it.
         const { error } = await db.from('google_calendar_connections').delete().eq('user_id', userId);

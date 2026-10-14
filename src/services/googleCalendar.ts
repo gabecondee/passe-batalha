@@ -7,7 +7,19 @@ export class GoogleCalendarError extends Error {
 }
 
 async function calendarRequest<T>(body: Record<string, unknown>): Promise<T> {
-  const { data, error } = await supabase.functions.invoke('google-calendar', { body });
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 30_000);
+  let result: Awaited<ReturnType<typeof supabase.functions.invoke>>;
+  try {
+    result = await supabase.functions.invoke('google-calendar', { body, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new GoogleCalendarError('A solicitação demorou demais. Tente novamente.');
+    throw error;
+  } finally {
+    window.clearTimeout(timeout);
+  }
+  const { data, error } = result;
+  if (controller.signal.aborted) throw new GoogleCalendarError('A solicitação demorou demais. Tente novamente.');
   if (error) {
     let details: { error?: string; code?: string } | undefined;
     if (error.context instanceof Response) {

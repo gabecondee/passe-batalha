@@ -99,7 +99,7 @@ export function useAgenda() {
   const [trainingLogs, setTrainingLogs] = useState<Record<string, TrainingAgendaLog>>({});
   
   const {
-    googleConnected, googleLoading, googleEvents, googleSyncing, googleError,
+    googleConnected, googleLoading, googleEvents, googleSyncing, googleDisconnecting, googleError,
     connectGoogleCalendar, disconnectGoogleCalendar, syncGoogleEvents, handleGoogleError,
   } = useGoogleCalendar();
 
@@ -520,6 +520,7 @@ export function useAgenda() {
     googleConnected,
     googleLoading,
     googleSyncing,
+    googleDisconnecting,
     googleError,
     connectGoogleCalendar,
     disconnectGoogleCalendar,
