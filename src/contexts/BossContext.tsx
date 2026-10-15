@@ -61,8 +61,9 @@ interface AppDateParts {
 
 function generateDayActions(boss: Boss, duration: number): BattleDay[] {
   if (boss.dailyTasks && boss.dailyTasks.length >= duration) {
-    return boss.dailyTasks.slice(0, duration).map(task => ({
-      day: task.day,
+    return boss.dailyTasks.slice(0, duration).map((task, index) => ({
+      // AI-provided labels may be strings, duplicated, or start at zero.
+      day: index + 1,
       status: 'pending' as DayStatus,
       action: task.action,
     }));
@@ -484,7 +485,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
       const battle = normalized?.battle;
 
-      const existingDay = currentBattle.days.find(d => d.day === day);
+      const existingDay = currentBattle.days.find(d => Number(d.day) === day);
       if (existingDay?.status !== 'pending') {
         setBattles(prev => ({ ...prev, [bossId]: normalized!.battle }));
         if (existingDay?.status === (success ? 'success' : 'fail')) {
@@ -509,7 +510,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       }
 
       const newDays = battle.days.map(d =>
-        d.day === day
+        Number(d.day) === day
           ? { ...d, status: (success ? 'success' : 'fail') as DayStatus, completedAt: new Date().toISOString() }
           : d
       );
@@ -607,12 +608,11 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     const normalized = currentBattle ? normalizeBattleForToday(currentBattle, boss) : null;
     const battle = normalized?.battle;
     if (!battle || battle.status !== 'active') return null;
-    const today = getAppDateKey();
-    const actedToday = battle.days.some(
-      d => d.completedAt && getAppDateKey(new Date(d.completedAt)) === today
-    );
-    if (actedToday) return null;
-    return battle.days.find(d => d.day === battle.currentDay && d.status === 'pending') || null;
+    // The numbered calendar day is authoritative. A legacy/manual correction
+    // may leave another day's completedAt on today's date (or invalid).
+    // That must not prevent recording this still-pending day.
+    const action = battle.days.find(d => Number(d.day) === battle.currentDay && d.status === 'pending');
+    return action ? { ...action, day: Number(action.day) } : null;
   }, [battles, bosses]);
 
   const abandonBattle = useCallback((bossId: string) => {

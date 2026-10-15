@@ -118,6 +118,36 @@ describe('boss persistence regression protection', () => {
     expect(result.current.getTodayBossAction('audit-boss')).toBeNull();
   });
 
+  it('does not block today because a repaired or legacy earlier day has a completion timestamp from today', async () => {
+    vi.setSystemTime(new Date('2026-10-13T15:00:00Z'));
+    db.row.days_history[0] = {
+      ...db.row.days_history[0], status: 'success', completedAt: '2026-10-13T04:00:00Z',
+    };
+    const { result } = renderHook(() => useBoss(), { wrapper });
+    await waitFor(() => expect(result.current.getBattle('audit-boss').currentDay).toBe(2));
+    expect(result.current.getTodayBossAction('audit-boss')?.day).toBe(2);
+  });
+
+  it('does not crash the daily action when an old recorded day has an invalid timestamp', async () => {
+    vi.setSystemTime(new Date('2026-10-13T15:00:00Z'));
+    db.row.days_history[0] = {
+      ...db.row.days_history[0], status: 'success', completedAt: 'legacy-invalid',
+    };
+    const { result } = renderHook(() => useBoss(), { wrapper });
+    await waitFor(() => expect(result.current.getBattle('audit-boss').currentDay).toBe(2));
+    expect(result.current.getTodayBossAction('audit-boss')?.day).toBe(2);
+  });
+
+  it('accepts numeric day labels stored as strings by legacy or generated campaigns', async () => {
+    db.row.days_history = db.row.days_history.map((day: { day: number }) => ({ ...day, day: String(day.day) }));
+    const { result } = renderHook(() => useBoss(), { wrapper });
+    await waitFor(() => expect(result.current.getBattle('audit-boss').status).toBe('active'));
+    expect(result.current.getTodayBossAction('audit-boss')?.day).toBe(1);
+    await act(async () => { expect(await result.current.recordDayAction('audit-boss', 1, true)).toBe(true); });
+    expect(db.row.days_history[0].status).toBe('success');
+    expect(db.row.days_history[0].day).toBe('1');
+  });
+
   it('shows a blocking saving dialog and prevents duplicate submissions', async () => {
     const { result } = renderHook(() => useBoss(), { wrapper });
     await waitFor(() => expect(result.current.getBattle('audit-boss').id).toBe('battle-one'));

@@ -2,7 +2,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { PageTransition } from '@/components/layout/PageTransition';
 import {
-  getAppDateKey,
   getBattleDayDateKey,
   getBattleDayForDate,
   getCalendarStartOffset,
@@ -110,7 +109,7 @@ export default function BossDetail() {
 
   const successCount = battle.days.filter(d => d.status === 'success').length;
   const failCount = battle.days.filter(d => d.status === 'fail').length;
-  const selectedDayData = selectedDay ? battle.days.find(d => d.day === selectedDay) : null;
+  const selectedDayData = selectedDay ? battle.days.find(d => Number(d.day) === selectedDay) : null;
   const calendarStartOffset = getCalendarStartOffset(battle.startedAt);
   const liveCurrentDay = isActive
     ? Math.min(getBattleDayForDate(battle.startedAt, battle.durationDays), battle.durationDays)
@@ -315,10 +314,6 @@ export default function BossDetail() {
 
                 <div className="grid grid-cols-7 gap-1.5">
                   {(() => {
-                    const todayKey = getAppDateKey();
-                    const actedToday = battle.days.some(
-                      d => d.completedAt && getAppDateKey(new Date(d.completedAt)) === todayKey
-                    );
                     return (
                       <>
                         {Array.from({ length: calendarStartOffset }).map((_, index) => (
@@ -329,22 +324,24 @@ export default function BossDetail() {
                           />
                         ))}
                         {battle.days.map((dayData) => {
-                    const isCurrent = dayData.day === liveCurrentDay;
+                    const calendarDay = Number(dayData.day);
+                    const isCurrent = calendarDay === liveCurrentDay;
                     const isPastPending = isActive && dayData.status === 'pending' && dayData.day < liveCurrentDay;
                     const visualStatus = isPastPending ? 'fail' : dayData.status;
                     const dateKey = getBattleDayDateKey(battle.startedAt, dayData.day);
                     const dateLabel = dateKey ? dateKey.slice(5).split('-').reverse().join('/') : '';
                     const isRecorded = visualStatus === 'success' || visualStatus === 'fail';
                     // Recorded days: always clickable for read-only view.
-                    // Pending days: clickable if active AND (test unlocked OR (not acted today AND is current day)).
+                    // The current day's status decides availability; timestamps
+                    // from legacy/corrected days cannot block a pending day.
                     const isClickable =
                       isRecorded ||
-                      (isActive && dayData.status === 'pending' && !isPastPending && (testUnlocked || (!actedToday && dayData.day === liveCurrentDay)));
+                      (isActive && dayData.status === 'pending' && !isPastPending && (testUnlocked || calendarDay === liveCurrentDay));
                     return (
                       <button
                         key={dayData.day}
                         disabled={!isClickable}
-                        onClick={() => isClickable && setSelectedDay(dayData.day)}
+                        onClick={() => isClickable && setSelectedDay(calendarDay)}
                         className={cn(
                           "aspect-square rounded-lg flex flex-col items-center justify-center text-[10px] font-medium transition-all duration-200 border",
                           visualStatus === 'success'
