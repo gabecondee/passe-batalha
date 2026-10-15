@@ -12,6 +12,15 @@ export const XP_PER_ACTION: Record<number, number> = {
 // Mapa entre índice do dia (Date.getDay(): 0=Dom..6=Sáb) e o token WeekDay.
 const INDEX_TO_WEEKDAY: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
 
+/** Date-only values are calendar dates, not UTC midnight. */
+export function parseMissionDate(value: string | Date): Date {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(value);
+}
+
 /** Converte um `Date` para 'yyyy-MM-dd'. */
 export function toISODate(d: Date): string {
   const y = d.getFullYear();
@@ -35,8 +44,8 @@ export function countOccurrences(
   weekDays: WeekDay[] | undefined,
 ): number {
   if (!weekDays || weekDays.length === 0) return 0;
-  const from = typeof fromISO === 'string' ? new Date(fromISO) : new Date(fromISO);
-  const to = typeof toISO === 'string' ? new Date(toISO) : new Date(toISO);
+  const from = parseMissionDate(fromISO);
+  const to = parseMissionDate(toISO);
   if (isNaN(from.getTime()) || isNaN(to.getTime())) return 0;
   // Normaliza para meio-dia local para evitar problemas de fuso.
   from.setHours(12, 0, 0, 0);

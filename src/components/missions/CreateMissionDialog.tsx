@@ -22,10 +22,10 @@ import { useDragScroll } from '@/hooks/useDragScroll';
 import { format, differenceInCalendarDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { computeTotalReward } from '@/lib/missionRewards';
-import { isMissionActive } from '@/lib/missionStatus';
+import { isMissionActive, MISSION_ACTIVE_LIMITS } from '@/lib/missionStatus';
 
 interface CreateMissionDialogProps {
-  onCreate: (data: any) => void;
+  onCreate: (data: any) => void | Promise<boolean>;
   defaultAttribute?: AttributeType;
   customTrigger?: React.ReactNode;
 }
@@ -130,13 +130,7 @@ const WEEK_DAY_FULL: Record<WeekDay, string> = {
 
 // Limite de missões ativas simultâneas por nível de dificuldade
 // 5: Insana | 4: Difícil | 3: Média | 2: Fácil | 1: Muito Fácil (ilimitada)
-const ACTIVE_LIMITS: Record<number, number | null> = {
-  5: 1,
-  4: 2,
-  3: 4,
-  2: 6,
-  1: null,
-};
+const ACTIVE_LIMITS = MISSION_ACTIVE_LIMITS;
 
 const DIFFICULTY_LABEL: Record<number, string> = {
   5: 'Insana',
@@ -150,7 +144,9 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
   const [open, setOpen] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
   useDragScroll(carouselRef);
-  const { missions } = useGame();
+  const { missions, missionsLoading, missionsError, missionMutationPending } = useGame();
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false);
 
   const initial = {
     objective: '',
@@ -209,10 +205,11 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
     form.dailyAction.trim().length > 0 &&
     form.weekDays.length > 0 &&
     !!form.deadline &&
-    !limitReached;
+    !limitReached && !missionsLoading && !missionsError && !missionMutationPending;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitLock.current) return;
     if (limitReached) {
       toast.error(
         `🚫 Limite atingido: você só pode ter ${limit} missão(ões) ${DIFFICULTY_LABEL[difficulty.level]} ativa(s) ao mesmo tempo.`
@@ -221,31 +218,40 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
     }
     if (!canSubmit) return;
 
-    onCreate({
-      name: form.objective.trim(),
-      description: form.objective.trim(),
-      type: 'main',
-      attribute: defaultAttribute || 'physical',
-      xpReward: totalReward,
-      difficulty: difficulty.level,
-      dailyAction: form.dailyAction.trim(),
-      weekDays: form.weekDays,
-      deadline: form.deadline?.toISOString(),
-    });
+    submitLock.current = true;
+    setSubmitting(true);
+    try {
+      const confirmed = await onCreate({
+        name: form.objective.trim(),
+        description: form.objective.trim(),
+        type: 'main',
+        attribute: defaultAttribute || 'physical',
+        xpReward: totalReward,
+        difficulty: difficulty.level,
+        dailyAction: form.dailyAction.trim(),
+        weekDays: form.weekDays,
+        deadline: form.deadline?.toISOString(),
+      });
 
-    setForm(initial);
-    setOpen(false);
+      if (confirmed !== false) {
+        setForm(initial);
+        setOpen(false);
+      }
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
   };
 
   const weekDaysSummary = form.weekDays.length
-    ? form.weekDays
+    ? [...form.weekDays]
         .sort((a, b) => WEEK_DAYS.findIndex(w => w.value === a) - WEEK_DAYS.findIndex(w => w.value === b))
         .map(d => WEEK_DAY_FULL[d])
         .join(', ')
     : '—';
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={value => { if (!submitting) setOpen(value); }}>
       <DialogTrigger asChild>
         {customTrigger ?? (
           <Button className="gap-2">
@@ -493,8 +499,8 @@ export function CreateMissionDialog({ onCreate, defaultAttribute, customTrigger 
           </AnimatePresence>
 
           {/* Botão */}
-          <Button type="submit" disabled={!canSubmit} className="w-full h-12 font-display uppercase tracking-wider">
-            Criar Missão
+          <Button type="submit" disabled={!canSubmit || submitting} className="w-full h-12 font-display uppercase tracking-wider">
+            {submitting ? 'Salvando...' : 'Criar Missão'}
           </Button>
         </form>
       </DialogContent>

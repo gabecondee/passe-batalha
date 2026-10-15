@@ -68,7 +68,13 @@ function Hexagon({ children, className }: { children: React.ReactNode; className
 export default function Missions() {
   const [selectedArea, setSelectedArea] = useState<AttributeType | null>(null);
 
-  const { missions, createMission, startMission, completeMission, updateProgress, deleteMission } = useGame();
+  const { missions, createMission, startMission, completeMission, updateProgress, deleteMission,
+    missionsLoading, missionsError, refreshMissions } = useGame();
+  const loadNotice = missionsError
+    ? <div role="alert" className="m-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400">
+        {missionsError} <button onClick={() => void refreshMissions()} className="underline">Tentar novamente</button>
+      </div>
+    : missionsLoading ? <p role="status" className="p-4 text-sm text-muted-foreground">Carregando missões...</p> : null;
 
   const activeByDifficulty = useMemo(() => {
     const map: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
@@ -89,6 +95,7 @@ export default function Missions() {
   if (selectedArea) {
     return (
       <MainLayout>
+        {loadNotice}
         <AreaMissionsView
           attribute={selectedArea}
           missions={missions}
@@ -105,6 +112,7 @@ export default function Missions() {
 
   return (
     <MainLayout>
+      {loadNotice}
       <div className="max-w-2xl mx-auto space-y-6 pb-8">
         {/* Title */}
         <div className="text-center pt-2">

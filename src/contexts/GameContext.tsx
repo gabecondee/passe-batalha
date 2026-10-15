@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Skill, Attribute, User, AttributeType, Mission, MissionStatus, WeekDay } from '@/types/game';
-import { skills as initialSkills, missions as initialMissions, currentUser as initialUser } from '@/data/mockData';
+import { Skill, Attribute, User, AttributeType, Mission } from '@/types/game';
+import { skills as initialSkills, currentUser as initialUser } from '@/data/mockData';
 import { toast } from 'sonner';
 import { getLevelInfo } from '@/lib/leveling';
 import { emit } from '@/lib/eventBus';
-import { XP_PER_ACTION, computeTotalReward, countOccurrences, toISODate, weekDayOf } from '@/lib/missionRewards';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { useMissionPersistence } from '@/hooks/useMissionPersistence';
+import { MissionSaveDialog } from '@/components/missions/MissionSaveDialog';
+import type { CreateMissionData } from '@/services/missionPersistence';
 
 const XP_PER_CLICK = 25;
 const XP_PER_LEVEL = 100; // XP por nível interno de uma habilidade (skill)
@@ -43,25 +45,16 @@ interface GameContextType {
   
   // Missions
   missions: Mission[];
-  createMission: (data: CreateMissionData) => void;
-  startMission: (id: string) => void;
-  updateProgress: (id: string, progress: number) => void;
-  completeMission: (id: string) => void;
-  completeDailyAction: (id: string) => void;
-  deleteMission: (id: string) => void;
-}
-
-interface CreateMissionData {
-  name: string;
-  description: string;
-  type: 'main' | 'secondary' | 'daily' | 'boss';
-  attribute: AttributeType;
-  xpReward: number;
-  difficulty: number;
-  timeLimit?: string;
-  dailyAction?: string;
-  weekDays?: WeekDay[];
-  deadline?: string;
+  missionsLoading: boolean;
+  missionsError: string | null;
+  missionMutationPending: boolean;
+  refreshMissions: () => Promise<void>;
+  createMission: (data: CreateMissionData) => Promise<boolean>;
+  startMission: (id: string) => Promise<boolean>;
+  updateProgress: (id: string, progress: number) => Promise<boolean>;
+  completeMission: (id: string) => Promise<boolean>;
+  completeDailyAction: (id: string) => Promise<boolean>;
+  deleteMission: (id: string) => Promise<boolean>;
 }
 
 const GameContext = createContext<GameContextType | undefined>(undefined);
@@ -83,7 +76,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const fetchData = async () => {
-      setMissions([]);
       setSkills(initialSkills.map(s => ({ ...s, isDefault: true })));
 
       if (!authUser) {
@@ -125,39 +117,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
       if (attrs?.initial_xp) {
         setAttributeInitialXp(attrs.initial_xp as any);
-      }
-
-      // 2. Fetch Missions
-      const { data, error } = await supabase
-        .from('missions')
-        .select('*')
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        toast.error('Erro ao buscar missões: ' + error.message);
-        return;
-      }
-
-      if (data) {
-        const mappedMissions: Mission[] = data.map(m => ({
-          id: m.id,
-          name: m.name,
-          description: m.description,
-          type: m.type as any,
-          attribute: m.attribute as any,
-          dailyAction: m.daily_action,
-          weekDays: m.week_days,
-          difficulty: m.difficulty,
-          xpReward: m.xp_reward,
-          progress: m.progress,
-          status: m.status as any,
-          lastDailyActionDate: m.last_daily_action_date,
-          completedDates: m.completed_dates || [],
-          deadline: m.deadline,
-          createdAt: m.created_at
-        }));
-        setMissions(mappedMissions);
       }
 
       // 3. Fetch Skills (both default and user custom skills)
@@ -552,90 +511,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     toast.success('🔄 Todas as habilidades foram resetadas!');
   }, []);
 
-  // Mission actions
-  const createMission = useCallback(async (data: CreateMissionData) => {
-    if (!authUser) {
-      toast.error('Você precisa estar logado para criar uma missão.');
-      return;
-    }
-
-    const createdAt = new Date().toISOString();
-    // Recompensa total = XP por ação (por dificuldade) × ocorrências até o prazo final.
-    const totalReward = computeTotalReward(
-      data.difficulty,
-      createdAt,
-      data.deadline,
-      data.weekDays,
-    );
-
-    const { data: insertedData, error } = await supabase
-      .from('missions')
-      .insert({
-        user_id: authUser.id,
-        name: data.name,
-        description: data.description,
-        type: data.type,
-        attribute: data.attribute,
-        daily_action: data.dailyAction,
-        week_days: data.weekDays,
-        difficulty: data.difficulty,
-        xp_reward: totalReward,
-        progress: 0,
-        status: 'active',
-        completed_dates: [],
-        deadline: data.deadline
-      })
-      .select()
-      .single();
-
-    if (error) {
-      toast.error('Erro ao criar missão no banco: ' + error.message);
-      return;
-    }
-
-    const newMission: Mission = {
-      id: insertedData.id,
-      name: insertedData.name,
-      description: insertedData.description,
-      type: insertedData.type as any,
-      attribute: insertedData.attribute as any,
-      xpReward: insertedData.xp_reward,
-      difficulty: insertedData.difficulty,
-      timeLimit: data.timeLimit,
-      dailyAction: insertedData.daily_action,
-      weekDays: insertedData.week_days,
-      deadline: insertedData.deadline,
-      createdAt: insertedData.created_at,
-      completedDates: insertedData.completed_dates || [],
-      progress: insertedData.progress,
-      status: insertedData.status as any,
-    };
-
-    setMissions(prev => [newMission, ...prev]);
-    emit({ type: 'mission:created', missionId: newMission.id });
-    toast.success(`📜 Nova missão criada: ${data.name}`);
-  }, [authUser]);
-
-  const startMission = useCallback((id: string) => {
-    setMissions(prev => prev.map(m =>
-      m.id === id ? { ...m, status: 'in_progress' as MissionStatus } : m
-    ));
-  }, []);
-
-  const updateProgress = useCallback((id: string, progress: number) => {
-    setMissions(prev => prev.map(m =>
-      m.id === id ? { ...m, progress: Math.min(100, Math.max(0, progress)) } : m
-    ));
-  }, []);
-
-  // Kept for backward compatibility with other UI (agenda etc.), but manual completion
-  // is no longer part of the mission mechanic — status is decided at the deadline.
-  const completeMission = useCallback((id: string) => {
-    setMissions(prev => prev.map(m =>
-      m.id === id ? { ...m, status: 'completed' as MissionStatus, progress: 100 } : m
-    ));
-  }, []);
-
   /**
    * Unified pipeline for awarding XP to a specific attribute.
    * Credits directly into `attributeXpBonus`, which feeds the attribute radar
@@ -666,106 +541,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     emit({ type: 'xp:gained', area: attribute, amount: xp, source: 'achievement' });
   }, [authUser]);
 
-  const completeDailyAction = useCallback(async (id: string) => {
-    const mission = missions.find(m => m.id === id);
-    if (!mission || !mission.dailyAction) return;
-    if (mission.status !== 'active' && mission.status !== 'in_progress') {
-      toast.info('Esta missão não está mais ativa.');
-      return;
-    }
-    const now = new Date();
-    const today = toISODate(now);
-
-    // Só é permitido concluir a ação no próprio dia previsto pela frequência.
-    if (mission.weekDays && mission.weekDays.length > 0 && !mission.weekDays.includes(weekDayOf(now))) {
-      toast.info('Hoje não faz parte da frequência desta missão.');
-      return;
-    }
-    if (mission.deadline) {
-      const dl = new Date(mission.deadline);
-      dl.setHours(23, 59, 59, 999);
-      if (now > dl) {
-        toast.info('O prazo desta missão já terminou.');
-        return;
-      }
-    }
-    const already = (mission.completedDates ?? []).includes(today);
-    if (already) {
-      toast.info('Ação diária já concluída hoje.');
-      return;
-    }
-
-    const completedDates = [...(mission.completedDates ?? []), today];
-    
-    // DB UPDATE
-    const { error } = await supabase
-      .from('missions')
-      .update({
-        completed_dates: completedDates,
-        last_daily_action_date: today
-      })
-      .eq('id', id);
-      
-    if (error) {
-      toast.error('Erro ao atualizar missão no banco: ' + error.message);
-      return;
-    }
-
-    const xp = XP_PER_ACTION[mission.difficulty] ?? 0;
-
-    setMissions(prev => prev.map(m => {
-      if (m.id !== id) return m;
-      return { ...m, completedDates, lastDailyActionDate: today };
-    }));
-
-    if (xp > 0) {
-      addAttributeXp(mission.attribute, xp);
-      toast.success(`✅ Ação diária concluída! +${xp} XP em ${mission.attribute}`);
-    } else {
-      toast.success('✅ Ação diária concluída!');
-    }
-  }, [missions, addAttributeXp]);
-
-  const deleteMission = useCallback(async (id: string) => {
-    const { error } = await supabase.from('missions').delete().eq('id', id);
-    if (error) {
-      toast.error('Erro ao deletar missão no banco: ' + error.message);
-      return;
-    }
-    setMissions(prev => prev.filter(m => m.id !== id));
-    emit({ type: 'mission:deleted', missionId: id });
-    toast.success('Missão removida');
-  }, []);
-
-  // Avalia automaticamente ao passar o prazo: ≥70% das ações concluídas → 'completed', senão 'failed'.
-  useEffect(() => {
-    const evaluate = () => {
-      setMissions(prev => {
-        let changed = false;
-        const now = new Date();
-        const next = prev.map(m => {
-          if (m.status === 'completed' || m.status === 'failed') return m;
-          if (!m.deadline) return m;
-          const dl = new Date(m.deadline);
-          dl.setHours(23, 59, 59, 999);
-          if (now <= dl) return m;
-          const start = m.createdAt ? new Date(m.createdAt) : dl;
-          const total = countOccurrences(start, dl, m.weekDays);
-          const done = (m.completedDates ?? []).length;
-          const pct = total > 0 ? (done / total) * 100 : 0;
-          const newStatus: MissionStatus = pct >= 70 ? 'completed' : 'failed';
-          changed = true;
-          return { ...m, status: newStatus };
-        });
-        return changed ? next : prev;
-      });
-    };
-    evaluate();
-    const interval = setInterval(evaluate, 60_000);
-    return () => clearInterval(interval);
-  }, []);
-
-
+  const {
+    createMission, startMission, completeMission, completeDailyAction, updateProgress, deleteMission,
+    missionsLoading, missionsError, refreshMissions, missionMutationPending, missionSaveState,
+  } = useMissionPersistence({ userId: authUser?.id, setMissions, awardXp: addAttributeXp });
   // Distribui inteiros com soma exata (base + resto nas primeiras posições)
   const distributeExact = (total: number, count: number): number[] => {
     if (count <= 0) return [];
@@ -958,6 +737,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     addAttributeXp,
     attributes,
     missions,
+    missionsLoading,
+    missionsError,
+    missionMutationPending,
+    refreshMissions,
     createMission,
     startMission,
     updateProgress,
@@ -969,6 +752,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   return (
     <GameContext.Provider value={value}>
       {children}
+      <MissionSaveDialog state={missionSaveState} />
     </GameContext.Provider>
   );
 }

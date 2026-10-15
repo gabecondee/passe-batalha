@@ -32,7 +32,7 @@ interface AreaMissionsViewProps {
   attribute: AttributeType;
   missions: Mission[];
   onBack: () => void;
-  onCreate: (data: any) => void;
+  onCreate: (data: any) => void | Promise<boolean>;
   onStart: (id: string) => void;
   onComplete: (id: string) => void;
   onUpdateProgress: (id: string, progress: number) => void;
@@ -117,7 +117,8 @@ export function AreaMissionsView({
   const AreaIcon = cfg.icon;
   const [filter, setFilter] = useState<FilterKey>('all');
   const filterScrollRef = useDragScroll<HTMLDivElement>();
-  const [summaryMission, setSummaryMission] = useState<Mission | null>(null);
+  const [summaryMissionId, setSummaryMissionId] = useState<string | null>(null);
+  const summaryMission = missions.find(mission => mission.id === summaryMissionId) || null;
 
   // Show only main missions in the area list — daily actions are kept as a field inside each mission.
   const areaMissions = useMemo(
@@ -266,8 +267,8 @@ export function AreaMissionsView({
                 key={m.id}
                 role="button"
                 tabIndex={0}
-                onClick={() => setSummaryMission(m)}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSummaryMission(m); } }}
+                onClick={() => setSummaryMissionId(m.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSummaryMissionId(m.id); } }}
                 className={cn(
                   'group rounded-2xl border bg-card/50 backdrop-blur p-3 md:p-4 flex items-start gap-3 transition-colors cursor-pointer focus:outline-none',
                   borderTone,
@@ -324,7 +325,7 @@ export function AreaMissionsView({
       <MissionSummaryDialog
         mission={summaryMission}
         open={!!summaryMission}
-        onOpenChange={(o) => { if (!o) setSummaryMission(null); }}
+        onOpenChange={(o) => { if (!o) setSummaryMissionId(null); }}
       />
     </div>
   );

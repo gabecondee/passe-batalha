@@ -54,7 +54,7 @@ const areaConfig: Record<AttributeType, {
 
 export function AreaCard({ attribute, missions, onClick }: AreaCardProps) {
   const config = areaConfig[attribute];
-  const active = missions.filter(isMissionActive).length;
+  const active = missions.filter(mission => isMissionActive(mission)).length;
   const completed = missions.filter(m => m.status === 'completed').length;
 
   return (

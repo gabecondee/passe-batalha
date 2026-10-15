@@ -30,7 +30,7 @@ const missionTypeLabels: Record<string, string> = {
 };
 
 export function MissionPreview({ missions }: MissionPreviewProps) {
-  const activeMissions = missions.filter(isMissionActive).slice(0, 4);
+  const activeMissions = missions.filter(mission => isMissionActive(mission)).slice(0, 4);
 
   return (
     <div className="fantasy-card p-6">

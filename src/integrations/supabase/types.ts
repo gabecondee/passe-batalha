@@ -14,6 +14,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      missions: {
+        Row: {
+          id: string; user_id: string; name: string; description: string | null;
+          type: string | null; attribute: string; daily_action: string | null;
+          week_days: Json | null; difficulty: number; xp_reward: number | null;
+          progress: number | null; status: string | null; last_daily_action_date: string | null;
+          completed_dates: Json | null; deadline: string | null; created_at: string | null;
+        }
+        Insert: {
+          id?: string; user_id: string; name: string; description?: string | null;
+          type?: string | null; attribute: string; daily_action?: string | null;
+          week_days?: Json | null; difficulty: number; xp_reward?: number | null;
+          progress?: number | null; status?: string | null; last_daily_action_date?: string | null;
+          completed_dates?: Json | null; deadline?: string | null; created_at?: string | null;
+        }
+        Update: Partial<Database['public']['Tables']['missions']['Insert']>
+        Relationships: []
+      }
       achievements: {
         Row: {
           category: string

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { EnergyCheckin } from '@/components/dashboard/EnergyCheckin';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { LevelUpOverlay } from '@/components/ui/LevelUpOverlay';
@@ -11,8 +11,8 @@ import { SkillsRadar } from '@/components/dashboard/SkillsRadar';
 import { useGame } from '@/contexts/GameContext';
 import { useBoss } from '@/contexts/BossContext';
 import { useAgenda } from '@/hooks/useAgenda';
-import { WeekDay } from '@/types/game';
-import { XP_PER_ACTION, toISODate } from '@/lib/missionRewards';
+import { XP_PER_ACTION, toISODate, weekDayOf } from '@/lib/missionRewards';
+import { isMissionActive } from '@/lib/missionStatus';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Zap, Flame, Star, Shield, Trophy, Swords, ChevronRight,
@@ -54,7 +54,8 @@ function getEnergySolid(level: number): string {
 }
 
 export default function Dashboard() {
-  const { user, missions, attributes, completeMission, completeDailyAction } = useGame();
+  const { user, missions, attributes, completeMission, completeDailyAction,
+    missionsLoading, missionsError, refreshMissions, missionMutationPending } = useGame();
   const { getActiveBattles, getTodayBossAction, recordDayAction, getProgress } = useBoss();
   const { state: streakRewardState } = useStreakReward();
   const { eventsByDate, toggleComplete } = useAgenda();
@@ -80,22 +81,12 @@ export default function Dashboard() {
   const ringCircumference = 2 * Math.PI * ringRadius;
   const ringOffset = ringCircumference * (1 - xpProgress / 100);
 
-  const todayWeekDay = useMemo<WeekDay>(() => {
-    const map: WeekDay[] = ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sab'];
-    return map[new Date().getDay()];
-  }, []);
-
-  const todayISO = toISODate(new Date());
   const now = new Date();
+  const todayWeekDay = weekDayOf(now);
+  const todayISO = toISODate(now);
   const allDailyMissions = missions.filter((m) => {
-    if (!m.dailyAction || !m.weekDays || m.weekDays.length === 0) return false;
-    if (m.status === 'completed' || m.status === 'failed') return false;
-    if (!m.weekDays.includes(todayWeekDay)) return false;
-    if (m.deadline) {
-      const dl = new Date(m.deadline);
-      dl.setHours(23, 59, 59, 999);
-      if (now > dl) return false;
-    }
+    if (!m.dailyAction || !isMissionActive(m, now)) return false;
+    if (m.weekDays?.length && !m.weekDays.includes(todayWeekDay)) return false;
     return true;
   });
   const dailyMissions = allDailyMissions.filter((m) => !(m.completedDates ?? []).includes(todayISO));
@@ -376,7 +367,11 @@ export default function Dashboard() {
           onToggle={() => setMissionsOpen((v) => !v)}
           delay={0.36}
         >
-          {allDailyMissions.length === 0 ? (
+          {missionsError ? (
+            <div role="alert" className="space-y-2 text-sm text-red-400">
+              <p>{missionsError}</p><button onClick={() => void refreshMissions()} className="underline">Tentar novamente</button>
+            </div>
+          ) : missionsLoading ? <p role="status" className="py-4 text-center text-sm text-muted-foreground">Carregando missões...</p> : allDailyMissions.length === 0 ? (
             <div className="text-center py-6 space-y-3">
               <p className="text-sm text-muted-foreground">
                 Nenhuma missão ativa.<br />
@@ -398,6 +393,7 @@ export default function Dashboard() {
               {dailyMissions.map((m) => (
                 <button
                   key={m.id}
+                  disabled={missionMutationPending}
                   onClick={() => completeDailyAction(m.id)}
                   className="w-full flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border/50 hover:border-cyan-400/40 transition text-left"
                 >
