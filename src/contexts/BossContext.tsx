@@ -331,6 +331,8 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
                 // showing the stale automatic failure we just calculated.
                 if (attempt < 2) return fetchData(attempt + 1);
                 return;
+              } else {
+                emit({ type: 'xp:refresh' });
               }
             }
           }
@@ -556,6 +558,7 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
       }
       if (sessionUser.current !== user.id) return false;
 
+      emit({ type: 'xp:refresh' });
       setBattles(prev => ({
         ...prev,
         [bossId]: nextBattle,
@@ -615,25 +618,23 @@ export function BossProvider({ children }: { children: React.ReactNode }) {
     return action ? { ...action, day: Number(action.day) } : null;
   }, [battles, bosses]);
 
-  const abandonBattle = useCallback((bossId: string) => {
-    setBattles(prev => {
-      const battle = prev[bossId];
-      if (!battle || battle.status !== 'active') return prev;
+  const abandonBattle = useCallback(async (bossId: string) => {
+    const battle = battles[bossId];
+    if (!user || !battle?.id || battle.status !== 'active') return;
+    try {
+      const { data, error } = await supabase.from('boss_battles')
+        .update({ status: 'lost' }).eq('user_id', user.id)
+        .eq('id', battle.id).eq('status', 'active').select('id').maybeSingle();
+      if (sessionUser.current !== user.id) return;
+      if (error || !data) throw error || new Error('Batalha não confirmada');
+      ++loadVersion.current;
+      setBattles(prev => ({ ...prev, [bossId]: { ...battle, status: 'lost', losses: battle.losses + 1 } }));
+      emit({ type: 'xp:refresh' });
       toast.error('💀 Batalha abandonada. Registrada como derrota.');
-
-      const nextBattle = { ...battle, status: 'lost' as BattleStatus, losses: battle.losses + 1 };
-
-      if (user) {
-        supabase.from('boss_battles')
-          .update({ status: 'lost' })
-          .eq('user_id', user.id)
-          .eq('id', battle.id)
-          .eq('status', 'active').then();
-      }
-
-      return { ...prev, [bossId]: nextBattle };
-    });
-  }, [user]);
+    } catch {
+      toast.error('Não foi possível confirmar o abandono. Tente novamente.');
+    }
+  }, [battles, user]);
 
   const markRewardsProcessed = useCallback((bossId: string) => {
     setBattles(prev => {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { toast } from 'sonner';
 import { format, parseISO, isSameDay, addDays, differenceInCalendarDays } from 'date-fns';
 import { 
   AGENDA_CATEGORIES, 
@@ -19,8 +20,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useTraining } from '@/lib/workoutStorage';
-import { useBusEvent } from '@/lib/eventBus';
+import { emit, useBusEvent } from '@/lib/eventBus';
 import { toISODate } from '@/lib/missionRewards';
+import { confirmWorkout } from '@/services/workoutCompletion';
 
 // Mission WeekDay → JS day index (0=Sun..6=Sat)
 const WEEKDAY_TO_INDEX: Record<WeekDay, number> = {
@@ -92,6 +94,10 @@ function trainingDayFromDate(date: string | null | undefined): string | null {
 
 export function useAgenda() {
   const { user } = useAuth();
+  const currentUser = useRef(user?.id);
+  currentUser.current = user?.id;
+  const pendingWorkouts = useRef(new Map<string, string>());
+  const savingWorkout = useRef(false);
   const { missions } = useGame();
   const { plan: trainingPlan } = useTraining();
   
@@ -298,34 +304,22 @@ export function useAgenda() {
         exercises: [],
       };
 
-      if (current) {
-        await supabase
-          .from('workout_logs')
-          .update({ status: nextStatus, details })
-          .eq('id', current.id)
-          .eq('user_id', user.id);
-      } else {
-        const { data } = await supabase
-          .from('workout_logs')
-          .insert({
-            user_id: user.id,
-            date: parsed.date,
-            status: nextStatus,
-            details,
-          })
-          .select('id')
-          .maybeSingle();
-
-        if (data?.id) {
-          setTrainingLogs(prev => ({ ...prev, [parsed.day]: { id: data.id, status: nextStatus } }));
-          return;
-        }
+      if (savingWorkout.current) return;
+      const key = `${user.id}:${parsed.date}:${parsed.day}`;
+      const id = current?.id || pendingWorkouts.current.get(key) || crypto.randomUUID();
+      pendingWorkouts.current.set(key, id);
+      savingWorkout.current = true;
+      try {
+        await confirmWorkout({ id, userId: user.id, date: parsed.date, status: nextStatus, details });
+        if (currentUser.current !== user.id) return;
+        setTrainingLogs(prev => ({ ...prev, [parsed.day]: { id, status: nextStatus } }));
+        emit({ type: 'workout:changed', userId: user.id, day: parsed.day, status: nextStatus });
+        emit({ type: 'workout:completed', userId: user.id, day: parsed.day, total: 0 });
+      } catch {
+        if (currentUser.current === user.id) toast.error('Não foi possível salvar o treino. Tente novamente.');
+      } finally {
+        savingWorkout.current = false;
       }
-
-      setTrainingLogs(prev => ({
-        ...prev,
-        [parsed.day]: { id: current?.id ?? id, status: nextStatus },
-      }));
       return;
     }
 

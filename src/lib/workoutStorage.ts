@@ -1,4 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { confirmWorkout } from '@/services/workoutCompletion';
+import type { Json } from '@/integrations/supabase/types';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { emit } from '@/lib/eventBus';
@@ -127,7 +129,10 @@ function isWorkoutLogDetails(value: unknown): value is WorkoutLogDetails {
 }
 
 export function useTraining() {
+  const retryIds = useRef(new Map<string, string>());
   const { user } = useAuth();
+  const currentUser = useRef(user?.id);
+  currentUser.current = user?.id;
   const [plan, setPlan] = useState<TrainingPlanData | null>(null);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [dayMuscles, setDayMuscles] = useState<Record<string, MuscleId[]>>({});
@@ -340,7 +345,7 @@ export function useTraining() {
         date: row.date,
         status: row.status as WorkoutStatus,
         created_at: row.created_at,
-        details: row.details as WorkoutLogDetails,
+        details: row.details as unknown as WorkoutLogDetails,
       }));
   }, [user]);
 
@@ -354,7 +359,7 @@ export function useTraining() {
     if (existing) {
       await supabase
         .from('workout_logs')
-        .update({ status: 'in-progress', details })
+        .update({ status: 'in-progress', details: details as unknown as Json })
         .eq('id', existing.id);
       emit({ type: 'workout:changed', day, status: 'in-progress' });
       return existing.id;
@@ -366,7 +371,7 @@ export function useTraining() {
         user_id: user.id,
         date: today,
         status: 'in-progress',
-        details,
+        details: details as unknown as Json,
       })
       .select('id')
       .maybeSingle();
@@ -379,7 +384,7 @@ export function useTraining() {
     if (!user) return;
     await supabase
       .from('workout_logs')
-      .update({ status: 'in-progress', details })
+      .update({ status: 'in-progress', details: details as unknown as Json })
       .eq('id', id)
       .eq('user_id', user.id);
     emit({ type: 'workout:changed', day: details.day, status: 'in-progress' });
@@ -389,26 +394,18 @@ export function useTraining() {
     if (!user) return;
     const today = toISODate(new Date());
 
-    if (activeLogId) {
-      await supabase.from('workout_logs').update({
-        date: today,
-        status,
-        details: details ?? { day, status }
-      }).eq('id', activeLogId).eq('user_id', user.id);
-    } else {
-      await supabase.from('workout_logs').insert({
-        user_id: user.id,
-        date: today,
-        status: status,
-        details: details ?? { day, status }
-      });
-    }
+    const key = `${user.id}:${today}:${day}`;
+    const id = activeLogId || retryIds.current.get(key) || crypto.randomUUID();
+    retryIds.current.set(key, id);
+    await confirmWorkout({ id, userId: user.id, date: today, status,
+      details: (details ?? { day, status }) as unknown as Json });
+    if (currentUser.current !== user.id) return;
 
-    emit({ type: 'workout:changed', day, status });
+    emit({ type: 'workout:changed', userId: user.id, day, status });
     
     if (status === 'success') {
-      emit({ type: 'workout:completed', day, total: details?.summary.sets_done ?? 0 });
-      window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', day, total: details?.summary.sets_done ?? 0 } }));
+      emit({ type: 'workout:completed', userId: user.id, day, total: details?.summary.sets_done ?? 0 });
+      window.dispatchEvent(new CustomEvent('pb-event', { detail: { type: 'workout:completed', userId: user.id, day, total: details?.summary.sets_done ?? 0 } }));
     }
   }, [user]);
 

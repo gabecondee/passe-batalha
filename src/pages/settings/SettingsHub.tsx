@@ -72,7 +72,7 @@ export default function SettingsHub() {
                 </p>
                 <p className="flex items-center gap-1.5 text-primary font-display text-lg md:text-xl">
                   <Star className="w-4 h-4 fill-primary" />
-                  {user.totalXP.toLocaleString('pt-BR')}
+                  {user.earnedTotalXP.toLocaleString('pt-BR')}
                 </p>
               </div>
             </div>

@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 
 export type BusEvent =
+  | { type: 'xp:refresh' }
   | { type: 'xp:gained'; area?: string; amount: number; source: string }
   | { type: 'mission:created'; missionId: string }
   | { type: 'mission:completed'; missionId: string; xp: number; area: string }
@@ -13,8 +14,8 @@ export type BusEvent =
   | { type: 'journal:entry-added'; count: number }
   | { type: 'journal:entry-deleted'; count: number }
   | { type: 'meal:logged'; date: string }
-  | { type: 'workout:changed'; day: string; status: string }
-  | { type: 'workout:completed'; day: string; total: number }
+  | { type: 'workout:changed'; userId?: string; day: string; status: string }
+  | { type: 'workout:completed'; userId?: string; day: string; total: number }
   | { type: 'finance:changed'; balance: number }
   | { type: 'agenda:event-completed'; eventId: string }
   | { type: 'fragments:changed'; balance: number; delta: number; reason: string }

@@ -136,7 +136,7 @@ export default function Profile() {
             <h3 className="font-display text-lg mb-4">Detalhes dos Atributos</h3>
             <div className="space-y-4">
               {attributes.map((attr) => {
-                const progress = ((attr.xp % 500) / 500) * 100;
+                const progress = attr.xpToNextLevel > 0 ? Math.min(100, (attr.currentXP / attr.xpToNextLevel) * 100) : 100;
                 return (
                   <div key={attr.type}>
                     <div className="flex justify-between items-center mb-1">
@@ -158,7 +158,7 @@ export default function Profile() {
                       />
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {attr.xp.toLocaleString()} XP total
+                      {attr.xp.toLocaleString()} XP de atributos (inclui avaliação inicial)
                     </p>
                   </div>
                 );

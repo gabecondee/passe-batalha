@@ -190,7 +190,7 @@ export default function Dashboard() {
             <Star className="w-6 h-6 text-amber-400 fill-amber-400/80" />
             <p className="text-[9px] tracking-[0.18em] text-muted-foreground uppercase mt-1.5">XP Total</p>
             <p className="font-display text-base text-amber-400 leading-tight mt-0.5">
-              {user.totalXP.toLocaleString('pt-BR')}
+              {user.earnedTotalXP.toLocaleString('pt-BR')}
             </p>
           </div>
 

@@ -18,7 +18,7 @@ const fixture = (): Mission => ({
 });
 function useHarness(userId = 'user') {
   const [missions, setMissions] = useState<Mission[]>([]);
-  return { missions, ...useMissionPersistence({ userId, setMissions, awardXp: mocks.xp }) };
+  return { missions, ...useMissionPersistence({ userId, setMissions, onProgressionChanged: mocks.xp }) };
 }
 async function loaded() {
   const hook = renderHook(() => useHarness());
@@ -100,11 +100,11 @@ describe('mission confirmation flow', () => {
     await act(async () => { result.current.missionSaveState.retry(); expect(await pending).toBe(true); });
     expect(mocks.xp).toHaveBeenCalledTimes(1);
   });
-  it('does not repeat XP for a daily action already stored by a prior attempt', async () => {
+  it('refreshes confirmed server XP when retry finds an already stored action', async () => {
     const { result } = await loaded();
     mocks.execute.mockImplementationOnce(async () => ({ ...acknowledge(), already: true, xp: 0 }));
     await act(async () => { expect(await result.current.completeDailyAction('mission')).toBe(true); });
-    expect(mocks.xp).not.toHaveBeenCalled();
+    expect(mocks.xp).toHaveBeenCalledTimes(1);
     expect(result.current.missions[0].completedDates).toHaveLength(1);
   });
   it('ignores a stale background read that returns after a confirmed action', async () => {

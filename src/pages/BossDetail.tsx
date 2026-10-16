@@ -7,7 +7,6 @@ import {
   getCalendarStartOffset,
   useBoss,
 } from '@/contexts/BossContext';
-import { useGame } from '@/contexts/GameContext';
 import { difficultyLabels, difficultyColors } from '@/types/boss';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -24,13 +23,12 @@ import {
   BookOpen, Heart, Crosshair, Trash2,
 } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 
 export default function BossDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { bosses, getBattle, startBattle, recordDayAction, getProgress, abandonBattle, markRewardsProcessed, deleteBoss } = useBoss();
-  const { applyBossPenalty, applyBossReward } = useGame();
+  const { bosses, getBattle, startBattle, recordDayAction, getProgress, abandonBattle, deleteBoss } = useBoss();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [bestiaryOpen, setBestiaryOpen] = useState(false);
   const [confirmStartOpen, setConfirmStartOpen] = useState(false);
@@ -42,22 +40,6 @@ export default function BossDetail() {
   const boss = bosses.find(b => b.id === id);
   const battle = boss ? getBattle(boss.id) : null;
   const progress = boss ? getProgress(boss.id) : 0;
-
-  useEffect(() => {
-    if (!battle || !boss) return;
-    if (battle.rewardsProcessed) return;
-    if (battle.status === 'lost') {
-      if (boss.rules?.penaltyAreas && boss.rules?.penaltyPoints) {
-        applyBossPenalty(boss.rules.penaltyAreas, boss.rules.penaltyPoints);
-      }
-      markRewardsProcessed(boss.id);
-    } else if (battle.status === 'won') {
-      if (boss.rules?.rewardAreas && boss.rules?.rewardXp) {
-        applyBossReward(boss.rules.rewardAreas, boss.rules.rewardXp);
-      }
-      markRewardsProcessed(boss.id);
-    }
-  }, [battle?.status, battle?.rewardsProcessed, boss, applyBossPenalty, applyBossReward, markRewardsProcessed]);
 
   if (!boss || !battle) {
     return (

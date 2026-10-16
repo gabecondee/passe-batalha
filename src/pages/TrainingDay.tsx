@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { toast } from 'sonner';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Plus, Pencil, Dumbbell, Play, Square, CheckCircle2, Clock, History, ChevronDown } from 'lucide-react';
@@ -11,7 +12,6 @@ import { AddExerciseDialog, ExerciseDraft } from '@/components/training/AddExerc
 import { ExerciseCard } from '@/components/training/ExerciseCard';
 import { MuscleIcon } from '@/components/training/MuscleIcon';
 import { WorkoutResultDialog } from '@/components/training/WorkoutResultDialog';
-import { useGame } from '@/contexts/GameContext';
 import { cn } from '@/lib/utils';
 import {
   useTraining,
@@ -37,7 +37,6 @@ const DAY_LABELS: Record<string, string> = {
 export default function TrainingDay() {
   const { day = '' } = useParams();
   const navigate = useNavigate();
-  const { applyBossReward } = useGame();
 
   const {
     exercises: allExercises,
@@ -249,11 +248,12 @@ export default function TrainingDay() {
     const exercisesDone = details.summary.exercises_done;
     const durationMin = details.duration_min;
 
-    if (variant === 'success') {
-      try { applyBossReward(['físico'], 10); } catch { /* ignore */ }
+    try {
+      await logWorkout(variant, day, details, activeWorkoutIdRef.current);
+    } catch {
+      toast.error('Não foi possível salvar o treino. Tente concluir novamente.');
+      return;
     }
-
-    await logWorkout(variant, day, details, activeWorkoutIdRef.current);
 
     // Reset done checks, keep reps/weight/info
     persist(resetChecks(workout));

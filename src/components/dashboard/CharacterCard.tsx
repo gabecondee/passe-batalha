@@ -101,7 +101,7 @@ export function CharacterCard({ user }: CharacterCardProps) {
         <div className="flex flex-wrap items-center justify-center gap-2 md:gap-3 mb-5">
           <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg bg-primary/10 border border-primary/20">
             <Flame className="w-3 h-3 md:w-3.5 md:h-3.5 text-primary" />
-            <span className="text-[11px] md:text-xs font-display text-primary">{user.totalXP.toLocaleString()} XP</span>
+            <span className="text-[11px] md:text-xs font-display text-primary">{user.earnedTotalXP.toLocaleString()} XP</span>
           </div>
           <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg bg-accent/10 border border-accent/20">
             <Shield className="w-3 h-3 md:w-3.5 md:h-3.5 text-accent" />

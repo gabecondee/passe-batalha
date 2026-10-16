@@ -11,7 +11,9 @@ export interface User {
   name: string;
   avatar: string;
   level: number;
+  /** Attribute total, including the initial onboarding assessment. */
   totalXP: number;
+  /** Persisted earned XP; used for the character level and all global XP cards. */
   earnedTotalXP: number;
   xpToNextLevel: number;
   currentXP: number;

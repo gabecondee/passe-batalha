@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
-import type { AttributeType, Mission } from '@/types/game';
+import type { Mission } from '@/types/game';
 import { toast } from 'sonner';
 import { emit } from '@/lib/eventBus';
 import { toISODate } from '@/lib/missionRewards';
@@ -11,7 +11,7 @@ import {
 interface Options {
   userId?: string;
   setMissions: Dispatch<SetStateAction<Mission[]>>;
-  awardXp: (attribute: AttributeType, xp: number) => void;
+  onProgressionChanged: () => void;
 }
 interface Attempt {
   operation: MissionOperation;
@@ -19,7 +19,7 @@ interface Attempt {
   resolve: (confirmed: boolean) => void;
 }
 
-export function useMissionPersistence({ userId, setMissions, awardXp }: Options) {
+export function useMissionPersistence({ userId, setMissions, onProgressionChanged }: Options) {
   const [missionsLoading, setLoading] = useState(Boolean(userId));
   const [missionsError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -79,7 +79,9 @@ export function useMissionPersistence({ userId, setMissions, awardXp }: Options)
           ? previous.map(m => m.id === result.mission!.id ? result.mission! : m)
           : [result.mission, ...previous]
         : previous.filter(m => m.id !== attempt.operation.id));
-      if (result.xp > 0 && result.mission) awardXp(result.mission.attribute, result.xp);
+      // The activity and its XP already committed together. Also reload after a
+      // retry whose first response was lost: the credit may already exist.
+      if (attempt.operation.kind === 'daily') onProgressionChanged();
       const kind = attempt.operation.kind;
       if (kind === 'create') emit({ type: 'mission:created', missionId: attempt.operation.id });
       if (kind === 'delete') emit({ type: 'mission:deleted', missionId: attempt.operation.id });
@@ -107,7 +109,7 @@ export function useMissionPersistence({ userId, setMissions, awardXp }: Options)
       window.clearTimeout(timeout);
       if (active.current === attempt) { running.current = false; setSaving(false); }
     }
-  }, [awardXp, finish, refreshMissions, setMissions]);
+  }, [onProgressionChanged, finish, refreshMissions, setMissions]);
 
   const run = useCallback((operation: MissionOperation): Promise<boolean> => {
     if (!userId) { toast.error('Entre novamente para registrar a missão.'); return Promise.resolve(false); }

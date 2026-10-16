@@ -6,6 +6,16 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+type ProfileRow = {
+  id: string; name: string | null; avatar: string | null; avatar_url: string | null;
+  class: string | null; main_area: string | null; birth_date: string | null;
+  weight: number | null; height: number | null; gender: string | null;
+  onboarding_completed: boolean | null; password_set: boolean;
+  last_seen_level: number | null; energy: number | null; total_xp: number | null;
+  xp_physical: number | null; xp_mental: number | null; xp_spiritual: number | null;
+  xp_professional: number | null; xp_financial: number | null; created_at: string | null;
+};
+
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
@@ -14,6 +24,29 @@ export type Database = {
   }
   public: {
     Tables: {
+      profiles: {
+        Row: ProfileRow;
+        Insert: Partial<ProfileRow> & { id: string };
+        Update: Partial<ProfileRow>;
+        Relationships: [];
+      };
+      user_economy: {
+        Row: { user_id: string; streak_days: number | null; best_streak: number | null;
+          total_fragments: number | null; streak_shields: number | null; last_checkin_date: string | null };
+        Insert: { user_id: string; streak_days?: number | null; best_streak?: number | null;
+          total_fragments?: number | null; streak_shields?: number | null; last_checkin_date?: string | null };
+        Update: { streak_days?: number | null; best_streak?: number | null;
+          total_fragments?: number | null; streak_shields?: number | null; last_checkin_date?: string | null };
+        Relationships: [];
+      };
+      workout_logs: {
+        Row: { id: string; user_id: string; date: string | null; status: string | null;
+          details: Json | null; created_at: string | null };
+        Insert: { id?: string; user_id: string; date?: string | null; status?: string | null;
+          details?: Json | null; created_at?: string | null };
+        Update: { date?: string | null; status?: string | null; details?: Json | null };
+        Relationships: [];
+      };
       missions: {
         Row: {
           id: string; user_id: string; name: string; description: string | null;
@@ -120,7 +153,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      xp_control_status: { Args: Record<string, never>; Returns: boolean }
     }
     Enums: {
       [_ in never]: never

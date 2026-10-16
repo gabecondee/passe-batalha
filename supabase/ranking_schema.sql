@@ -19,13 +19,17 @@ USING (auth.role() = 'authenticated');
 
 -- 2. Criar a View do Ranking Global
 -- Esta view junta as informações públicas necessárias para o placar.
-CREATE OR REPLACE VIEW public.global_ranking AS
+CREATE OR REPLACE VIEW public.global_ranking WITH (security_invoker = true) AS
 SELECT 
     p.id,
     p.name,
     p.avatar,
     p.created_at,
-    p.total_xp,
+    (GREATEST(0, COALESCE(p.xp_physical, 0))::bigint
+      + GREATEST(0, COALESCE(p.xp_mental, 0))
+      + GREATEST(0, COALESCE(p.xp_spiritual, 0))
+      + GREATEST(0, COALESCE(p.xp_professional, 0))
+      + GREATEST(0, COALESCE(p.xp_financial, 0)))::integer AS total_xp,
     COALESCE(e.streak_days, 0) as streak
 FROM public.profiles p
 LEFT JOIN public.user_economy e ON p.id = e.user_id;

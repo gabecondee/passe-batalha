@@ -8,7 +8,7 @@ import { useFinances } from '@/hooks/useFinances';
 import { useAchievementsData } from '@/hooks/useAchievementsData';
 import { useBoss } from '@/contexts/BossContext';
 import { useStreakReward } from '@/hooks/useStreakReward';
-import { ranking } from '@/data/mockData';
+import { useGlobalRanking } from '@/hooks/useGlobalRanking';
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -52,8 +52,9 @@ export default function StatisticsSettings() {
     .filter(t => t.category === 'investimentos' && t.type === 'income')
     .reduce((s, t) => s + t.amount, 0);
 
-  const userInRank = ranking.find(u => u.id === user.id)?.rank ?? '—';
-  const achXp = achievements.filter(a => a.unlocked).reduce((s, a) => s + (a.xp || 0), 0);
+  const { userRank } = useGlobalRanking();
+  const userInRank = userRank ?? '—';
+  const achXp = achievements.filter(a => a.unlockedAt).reduce((s, a) => s + (a.xp || 0), 0);
   const mostRarity = Object.entries(byRarity).sort((a, b) => b[1] - a[1])[0]?.[0] || '—';
   const bossWins = bosses.filter(b => b.defeated).length;
   const bossLosses = Object.values(battles).reduce((s, b) => s + (b.losses || 0), 0);
@@ -64,7 +65,7 @@ export default function StatisticsSettings() {
         <SettingsHeader icon={Trophy} title="Estatísticas" backTo="/settings" />
 
         <Section title="Evolução">
-          <Stat label="XP Total" value={user.totalXP} />
+          <Stat label="XP Total" value={user.earnedTotalXP} />
           <Stat label="Nível atual" value={user.level} />
           <Stat label="Dias consecutivos" value={streak.streak_days} />
           <Stat label="Maior sequência" value={streak.best_streak} />
@@ -110,7 +111,7 @@ export default function StatisticsSettings() {
           <Stat label="Desbloqueadas" value={achSummary.unlocked} />
           <Stat label="Restantes" value={achSummary.locked} />
           <Stat label="Raridade top" value={String(mostRarity)} />
-          <Stat label="XP conquistado" value={achXp} />
+          <Stat label="XP nominal das conquistas" value={achXp} />
         </Section>
 
         <Section title="Ranking & Bosses">

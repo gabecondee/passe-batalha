@@ -162,12 +162,13 @@ export function MissionSummaryDialog({ mission, open, onOpenChange }: Props) {
             <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/15 to-primary/5 px-4 py-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Recompensa da missão</p>
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">XP total previsto nas ações diárias</p>
                   <p className="font-display text-sm">Missão {difficulty.label}</p>
                 </div>
                 <div className="xp-badge text-lg">+{mission.xpReward} XP</div>
               </div>
             </div>
+            <p className="text-xs text-muted-foreground">O XP é creditado a cada ação diária confirmada. Concluir a missão não concede esse total novamente.</p>
           </section>
         </div>
       </DialogContent>

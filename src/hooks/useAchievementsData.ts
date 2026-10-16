@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
 import { ALL_ACHIEVEMENTS, AchievementDef, Rarity, Requirement } from '@/data/achievementsData';
 import { useGame } from '@/contexts/GameContext';
@@ -5,19 +6,11 @@ import { useBoss } from '@/contexts/BossContext';
 import { useFinances } from '@/hooks/useFinances';
 import { useStreakReward } from '@/hooks/useStreakReward';
 import { emit, useBusEvent } from '@/lib/eventBus';
-import { ranking as mockRanking } from '@/data/mockData';
-import { getLevelInfo } from '@/lib/leveling';
+import { useGlobalRanking } from '@/hooks/useGlobalRanking';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 
-const AREA_TO_ATTR: Record<string, 'physical' | 'mental' | 'spiritual' | 'professional' | 'financial'> = {
-  'Física': 'physical',
-  'Mental': 'mental',
-  'Espiritual': 'spiritual',
-  'Profissional': 'professional',
-  'Financeira': 'financial',
-};
 
 export interface AchievementStatus extends AchievementDef {
   unlocked: boolean;
@@ -30,11 +23,16 @@ export interface AchievementStatus extends AchievementDef {
 
 export function useAchievementsData() {
   const { user: authUser } = useAuth();
-  const { user, attributes, missions, hasCompletedOnboarding, addAttributeXp } = useGame();
+  const userId = authUser?.id;
+  const { user, attributes, missions, hasCompletedOnboarding, progressionReady } = useGame();
   const { bosses, battles } = useBoss();
+  const { userRank: confirmedRank } = useGlobalRanking();
   const { transactions } = useFinances();
   const { state: streak } = useStreakReward();
 
+  const syncing = useRef(new Set<string>());
+  const activeUser = useRef(userId);
+  activeUser.current = userId;
   const [popup, setPopup] = useState<AchievementStatus | null>(null);
   const [popupQueue, setPopupQueue] = useState<AchievementStatus[]>([]);
   
@@ -57,6 +55,8 @@ export function useAchievementsData() {
 
   // Fetch initial data
   useEffect(() => {
+    let cancelled = false;
+    syncing.current.clear();
     setUnlockedMap({});
     setDbStats({
       trainings_completed: 0,
@@ -69,12 +69,12 @@ export function useAchievementsData() {
     setPopupQueue([]);
     setIsLoaded(false);
 
-    if (!authUser) {
+    if (!userId) {
       return;
     }
     const fetchDb = async () => {
       // 1. Reconciliação (Retry) de falhas anteriores
-      const pendingKey = `pending_sync_achievements_${authUser.id}`;
+      const pendingKey = `pending_sync_achievements_${userId}`;
       const pendingIds: string[] = JSON.parse(localStorage.getItem(pendingKey) || '[]');
       
       if (pendingIds.length > 0) {
@@ -83,13 +83,13 @@ export function useAchievementsData() {
           const { data, error } = await supabase
             .from('user_achievements')
             .update({ notified: true })
-            .eq('user_id', authUser.id)
+            .eq('user_id', userId)
             .eq('achievement_id', pid)
             .select();
             
           if (!error && data && data.length > 0) {
             // Sucesso na repescagem, adiciona ao cache oficial
-            const localKey = `local_notified_achievements_${authUser.id}`;
+            const localKey = `local_notified_achievements_${userId}`;
             const localNotified = JSON.parse(localStorage.getItem(localKey) || '[]');
             if (!localNotified.includes(pid)) {
               localStorage.setItem(localKey, JSON.stringify([...localNotified, pid]));
@@ -102,9 +102,14 @@ export function useAchievementsData() {
       }
 
       const [statsRes, achRes] = await Promise.all([
-        supabase.from('user_stats').select('*').eq('user_id', authUser.id).maybeSingle(),
-        supabase.from('user_achievements').select('*').eq('user_id', authUser.id)
+        supabase.from('user_stats').select('*').eq('user_id', userId).maybeSingle(),
+        supabase.from('user_achievements').select('*').eq('user_id', userId)
       ]);
+      if (cancelled || activeUser.current !== userId) return;
+      if (achRes.error) {
+        toast.error('Não foi possível carregar suas conquistas. Reabra a página para tentar novamente.');
+        return;
+      }
       
       if (statsRes.data) {
         setDbStats({
@@ -119,7 +124,7 @@ export function useAchievementsData() {
         // localStorage é a fonte de verdade para "notified" neste browser.
         // Se o usuário já dispensou o popup localmente, não mostramos de novo
         // mesmo que o banco ainda tenha notified=false (pode ter falhado o sync).
-        const storageKey = `local_notified_achievements_${authUser.id}`;
+        const storageKey = `local_notified_achievements_${userId}`;
         const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
 
         const map: Record<string, { date: string, notified: boolean }> = {};
@@ -145,7 +150,7 @@ export function useAchievementsData() {
             supabase
               .from('user_achievements')
               .update({ notified: true })
-              .eq('user_id', authUser.id)
+              .eq('user_id', userId)
               .eq('achievement_id', aid)
               .then(({ error }) => {
                 if (error) console.warn('Sync background notified falhou:', aid, error.message);
@@ -155,17 +160,21 @@ export function useAchievementsData() {
       }
       setIsLoaded(true);
     };
-    fetchDb();
-  }, [authUser]);
+    void fetchDb().catch(() => {
+      if (!cancelled) toast.error('Não foi possível carregar suas conquistas. Reabra a página para tentar novamente.');
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
 
   useBusEvent(useCallback(async (e) => {
-    if (!authUser) return;
+    if (!userId) return;
+    if ((e.type === 'workout:changed' || e.type === 'workout:completed') && e.userId && e.userId !== userId) return;
     
     // Regra inegociável 3: Atualizar contador no Supabase antes de reavaliar
     if (e.type === 'workout:completed') {
       setDbStats(prev => {
         const next = { ...prev, trainings_completed: prev.trainings_completed + 1 };
-        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        supabase.from('user_stats').upsert({ user_id: userId, ...next }).then();
         return next;
       });
     }
@@ -173,7 +182,7 @@ export function useAchievementsData() {
     if (e.type === 'journal:entry-added') {
       setDbStats(prev => {
         const next = { ...prev, journal_entries: prev.journal_entries + 1 };
-        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        supabase.from('user_stats').upsert({ user_id: userId, ...next }).then();
         return next;
       });
     }
@@ -181,7 +190,7 @@ export function useAchievementsData() {
     if (e.type === 'journal:entry-deleted') {
       setDbStats(prev => {
         const next = { ...prev, journal_entries: Math.max(0, prev.journal_entries - 1) };
-        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        supabase.from('user_stats').upsert({ user_id: userId, ...next }).then();
         return next;
       });
     }
@@ -189,7 +198,7 @@ export function useAchievementsData() {
     if ((e.type as string) === 'diet:plan-created') {
       setDbStats(prev => {
         const next = { ...prev, diet_plans_created: prev.diet_plans_created + 1 };
-        supabase.from('user_stats').upsert({ user_id: authUser.id, ...next }).then();
+        supabase.from('user_stats').upsert({ user_id: userId, ...next }).then();
         return next;
       });
     }
@@ -208,7 +217,7 @@ export function useAchievementsData() {
     ) {
       setTick((t) => t + 1);
     }
-  }, [authUser]));
+  }, [userId]));
 
   const stats = useMemo(() => {
     const areaXp: Record<string, number> = {
@@ -248,17 +257,8 @@ export function useAchievementsData() {
       if (bossesByRarity[b.difficulty] !== undefined) bossesByRarity[b.difficulty]++;
     });
 
-    // Ranking rank (based on mock + current user, sorted by totalXP)
-    const combined = mockRanking.some(u => u.id === user.id)
-      ? mockRanking.slice()
-      : [
-          ...mockRanking,
-          { id: user.id, name: user.name, avatar: user.avatar, level: user.level, totalXP: user.totalXP, rank: 0, streak: 0 },
-        ];
-    const sorted = combined
-      .map(u => ({ ...u, level: getLevelInfo(u.totalXP).level }))
-      .sort((a, b) => b.totalXP - a.totalXP);
-    const userRank = sorted.findIndex(u => u.id === user.id) + 1 || 999;
+    // Unknown ranking never satisfies a ranking achievement.
+    const userRank = confirmedRank ?? Number.POSITIVE_INFINITY;
 
     // Shop purchases (item ids)
     const purchasedItems = new Set((streak.shop_purchases || []).map(p => p.itemId));
@@ -285,7 +285,7 @@ export function useAchievementsData() {
       purchasedItems,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, attributes, missions, bosses, battles, transactions, streak, hasCompletedOnboarding, tick, dbStats]);
+  }, [user, attributes, missions, bosses, battles, transactions, streak, hasCompletedOnboarding, tick, dbStats, confirmedRank]);
 
   const achievements = useMemo<AchievementStatus[]>(() => {
     return ALL_ACHIEVEMENTS.map(a => {
@@ -306,9 +306,9 @@ export function useAchievementsData() {
     });
   }, [stats, unlockedMap]);
 
-  // Regra inegociável 2: Desbloqueio e Recompensas via Supabase + addAttributeXp
+  // The database persists the unlock and its reward in a single transaction.
   useEffect(() => {
-    if (!authUser || !isLoaded) return; // Guard clause de autenticação e sincronia
+    if (!userId || !isLoaded || !progressionReady) return; // Guard clause de autenticação e sincronia
     
     // Filter unlocked items
     const unlockedItems = achievements.filter(a => a.unlocked);
@@ -320,47 +320,33 @@ export function useAchievementsData() {
     const unnotifiedItems = unlockedItems.filter(a => unlockedMap[a.id] && !unlockedMap[a.id].notified && !pendingSyncIds.has(a.id));
 
     if (brandNewItems.length > 0) {
-      const now = new Date().toISOString();
-      const newMap = { ...unlockedMap };
-      
-      brandNewItems.forEach(a => { newMap[a.id] = { date: now, notified: false }; });
-      setUnlockedMap(newMap);
-
-      // Fallback storage para caso o BD falhe em atualizar o notified, escopado pelo userId
-      const storageKey = `local_notified_achievements_${authUser.id}`;
-      const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
-
-      // 1. Filtrar as que realmente precisam de popup (não estão no local storage)
-      const needsPopup = brandNewItems.filter(a => !localNotified.includes(a.id));
-
-      needsPopup.forEach(async (a) => {
-        const { error } = await supabase.from('user_achievements').upsert({
-          user_id: authUser.id,
-          achievement_id: a.id,
-          unlocked_at: now,
-          notified: false
-        }, { onConflict: 'user_id,achievement_id', ignoreDuplicates: true });
-        
-        if (!error) {
-          const attr = AREA_TO_ATTR[a.area];
-          if (attr && a.xp > 0) {
-            try { addAttributeXp(attr, a.xp); } catch { /* ignore */ }
-          }
+      const localNotified: string[] = JSON.parse(localStorage.getItem(`local_notified_achievements_${userId}`) || '[]');
+      brandNewItems.forEach(async a => {
+        if (syncing.current.has(a.id)) return;
+        syncing.current.add(a.id);
+        const now = new Date().toISOString();
+        try {
+          const { error } = await supabase.from('user_achievements').upsert({
+            user_id: userId, achievement_id: a.id, unlocked_at: now, notified: false,
+          }, { onConflict: 'user_id,achievement_id', ignoreDuplicates: true });
+          if (error) throw error;
+          if (activeUser.current !== userId) return;
+          // The database credits the reward in this same transaction. Duplicate
+          // upserts from other mounted hooks/tabs never credit twice.
+          setUnlockedMap(prev => ({ ...prev, [a.id]: { date: now, notified: localNotified.includes(a.id) } }));
           emit({ type: 'achievement:unlocked', achievementId: a.id });
+          if (!localNotified.includes(a.id)) {
+            setPopupQueue(prev => prev.some(p => p.id === a.id) || currentPopupIdRef.current === a.id ? prev : [...prev, a]);
+          }
+        } catch {
+          if (activeUser.current === userId) toast.error('Não foi possível salvar uma conquista. Reabra a página para tentar novamente.');
         }
-      });
-      
-      setPopupQueue(prev => {
-        const existingIds = new Set(prev.map(p => p.id));
-        if (currentPopupIdRef.current) existingIds.add(currentPopupIdRef.current);
-        const toAdd = needsPopup.filter(a => !existingIds.has(a.id));
-        return [...prev, ...toAdd];
       });
     }
 
     if (unnotifiedItems.length > 0) {
       // Já estão no DB, mas precisamos garantir que não foram vistas offline/cache
-      const storageKey = `local_notified_achievements_${authUser.id}`;
+      const storageKey = `local_notified_achievements_${userId}`;
       const localNotified: string[] = JSON.parse(localStorage.getItem(storageKey) || '[]');
       const needsPopup = unnotifiedItems.filter(a => !localNotified.includes(a.id));
 
@@ -374,7 +360,7 @@ export function useAchievementsData() {
       }
     }
     
-  }, [achievements, addAttributeXp, unlockedMap, authUser, pendingSyncIds]);
+  }, [achievements, progressionReady, isLoaded, unlockedMap, userId, pendingSyncIds]);
 
 
   useEffect(() => {
@@ -392,32 +378,32 @@ export function useAchievementsData() {
         [achievementId]: { ...prev[achievementId], notified: true }
       }));
       
-      if (authUser) {
+      if (userId) {
         try {
-          const storageKey = `local_notified_achievements_${authUser.id}`;
+          const storageKey = `local_notified_achievements_${userId}`;
           const localNotified = JSON.parse(localStorage.getItem(storageKey) || '[]');
           if (!localNotified.includes(achievementId)) {
             localStorage.setItem(storageKey, JSON.stringify([...localNotified, achievementId]));
           }
-        } catch {}
+        } catch { /* Browser storage is unavailable; persisted state is kept. */ }
       }
     } else {
       // Falha no banco - Adicionar ao cache temporário (memória) para evitar loop na sessão
       setPendingSyncIds(prev => new Set(prev).add(achievementId));
       
-      if (authUser) {
+      if (userId) {
         try {
-          const pendingKey = `pending_sync_achievements_${authUser.id}`;
+          const pendingKey = `pending_sync_achievements_${userId}`;
           const pendingIds = JSON.parse(localStorage.getItem(pendingKey) || '[]');
           if (!pendingIds.includes(achievementId)) {
             localStorage.setItem(pendingKey, JSON.stringify([...pendingIds, achievementId]));
           }
-        } catch {}
+        } catch { /* Browser storage is unavailable; persisted state is kept. */ }
       }
     }
 
     setPopup(null);
-  }, [authUser]);
+  }, [userId]);
 
   const summary = useMemo(() => {
     const total = achievements.length;

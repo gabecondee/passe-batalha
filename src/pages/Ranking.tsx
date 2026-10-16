@@ -1,11 +1,10 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Trophy, TrendingUp, Users, Globe, Crown, Medal, Award, User as UserIcon } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useGame } from '@/contexts/GameContext';
-import { getLevelInfo } from '@/lib/leveling';
+import { useGlobalRanking } from '@/hooks/useGlobalRanking';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/integrations/supabase/client';
 
 type Period = '7d' | '30d' | 'all';
 
@@ -18,65 +17,7 @@ const PERIODS: { key: Period; label: string }[] = [
 export default function Ranking() {
   const { user } = useGame();
   const [period, setPeriod] = useState<Period>('all');
-  const [rawRanking, setRawRanking] = useState<any[]>([]);
-
-  useEffect(() => {
-    async function fetchRanking() {
-      // Buscar profiles com seus respectivos XP's
-      const { data } = await supabase.from('profiles').select('id, name, avatar, created_at, xp_physical, xp_mental, xp_spiritual, xp_professional, xp_financial');
-      
-      // Buscar streaks separadamente na tabela de economia
-      const { data: streaksData } = await supabase.from('user_economy').select('user_id, streak_days');
-      const streakMap = new Map((streaksData || []).map(s => [s.user_id, s.streak_days]));
-
-      if (data) {
-        const ranking = data.map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          avatar: p.avatar,
-          created_at: p.created_at,
-          total_xp: (p.xp_physical || 0) + (p.xp_mental || 0) + (p.xp_spiritual || 0) + (p.xp_professional || 0) + (p.xp_financial || 0),
-          streak: streakMap.get(p.id) || 0
-        }));
-        setRawRanking(ranking);
-      }
-    }
-    fetchRanking();
-  }, []);
-
-  const fullRanking = useMemo(() => {
-    const base = rawRanking.some((u) => u.id === user.id)
-      ? rawRanking
-      : [
-          ...rawRanking,
-          {
-            id: user.id,
-            name: user.name,
-            avatar: user.avatar,
-            created_at: new Date().toISOString(),
-            total_xp: user.earnedTotalXP || 0,
-            streak: 0,
-          },
-        ];
-
-    return base
-      .map((u) => ({ ...u, level: getLevelInfo(u.total_xp || 0).level }))
-      .sort((a, b) => {
-        // Regra inegociável 1: Algoritmo de ordenação (XP -> Streak -> CreatedAt)
-        const xpA = a.total_xp || 0;
-        const xpB = b.total_xp || 0;
-        if (xpB !== xpA) return xpB - xpA;
-        
-        const streakA = a.streak || 0;
-        const streakB = b.streak || 0;
-        if (streakB !== streakA) return streakB - streakA;
-        
-        return (a.created_at || '').localeCompare(b.created_at || '');
-      })
-      .map((u, i) => ({ ...u, rank: i + 1 }));
-  }, [rawRanking, user]);
-
-  const userRank = fullRanking.find((u) => u.id === user.id)?.rank ?? 0;
+  const { ranking: fullRanking, userRank, isError, isPending, refetch } = useGlobalRanking();
 
   const getRankBadge = (rank: number) => {
     if (rank === 1)
@@ -134,12 +75,16 @@ export default function Ranking() {
           </p>
         </motion.div>
 
+        {isError && <div role="alert" className="mb-4 rounded border border-destructive p-3 text-sm">
+          Não foi possível atualizar o ranking. <button className="underline" onClick={() => void refetch()}>Tentar novamente</button>
+        </div>}
+        {isPending && <p role="status" className="mb-4 text-sm text-muted-foreground">Carregando ranking…</p>}
         {/* Summary Cards */}
         <div className="grid grid-cols-3 gap-2.5 md:gap-4">
           <SummaryCard
             delay={0.05}
             icon={<Trophy className="h-6 w-6 md:h-7 md:w-7" />}
-            value={`#${userRank}`}
+            value={userRank ? `#${userRank}` : '—'}
             label="Sua Posição"
             accent="primary"
             highlight
@@ -147,7 +92,7 @@ export default function Ranking() {
           <SummaryCard
             delay={0.1}
             icon={<TrendingUp className="h-6 w-6 md:h-7 md:w-7" />}
-            value={(user.totalXP || 0).toLocaleString('pt-BR')}
+            value={(user.earnedTotalXP || 0).toLocaleString('pt-BR')}
             label="Seu XP Total"
             accent="blue"
           />

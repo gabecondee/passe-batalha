@@ -16,7 +16,7 @@ export function InventoryHero() {
     {
       icon: Zap,
       label: 'XP Total',
-      value: formatCompactNumber(user.totalXP),
+      value: formatCompactNumber(user.earnedTotalXP),
       color: 'text-primary',
       glow: 'shadow-[0_0_20px_hsl(var(--primary)/0.5)]',
     },
