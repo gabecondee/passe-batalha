@@ -7,6 +7,11 @@
    em `supabase/functions/generate-avatar/index.ts` e
    `supabase/functions/generate-boss/index.ts`. As secrets permanecem no projeto.
    O commit e o deploy do frontend não publicam essas funções automaticamente.
+   `generate-boss` foi sincronizada com a versão de produção de 653 linhas
+   fornecida pelo usuário: prompt, validações, 50 XP na raridade comum e
+   `portraitDataUrl` foram preservados. A única mudança nessa base é o modelo
+   de imagem, de `gpt-image-1` para `gpt-image-2`, mantendo 1024 × 1536 e PNG.
+   O frontend converte o retrato para WebP antes de enviá-lo ao Storage.
 3. Validar uma geração de avatar e uma de chefão, uma edição de foto do perfil,
    o recarregamento da página e a foto exibida no ranking.
 4. Compactar os arquivos antigos seguindo `OPTIMIZE_SUPABASE_IMAGES.md`, começando
