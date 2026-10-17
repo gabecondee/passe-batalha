@@ -1,4 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import { optimizePortrait } from './optimizePortrait';
+import { localImageUrl } from './localImages';
 
 /**
  * Baixa uma imagem de uma URL temporária (como DALL-E, Pollinations, etc.)
@@ -10,6 +12,8 @@ export async function uploadBossPortraitToSupabase(
   bossId: string
 ): Promise<string> {
   try {
+    // Bundled fallbacks already have permanent URLs; do not duplicate them in Storage.
+    if (imageUrl.startsWith('/') && !imageUrl.startsWith('//')) return localImageUrl(imageUrl);
     // Se a imagem já for uma URL do Supabase ou um data SVG estático, retorna diretamente
     if (imageUrl.includes('supabase.co/storage')) {
       return imageUrl;
@@ -30,13 +34,17 @@ export async function uploadBossPortraitToSupabase(
       blob = await response.blob();
     }
 
-    const fileName = `${bossId}-${Date.now()}.png`;
+    blob = await optimizePortrait(blob);
+    const extension = ({ 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/svg+xml': 'svg', 'image/gif': 'gif' } as Record<string, string>)[blob.type] || 'png';
+    const fileName = `${bossId}-${Date.now()}.${extension}`;
 
     // 2. Faz o upload para o bucket 'boss-portraits' no Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('boss-portraits')
       .upload(fileName, blob, {
         contentType: blob.type || 'image/png',
+        // Every upload has a new URL, so browsers can retain it for a year.
+        cacheControl: '31536000',
         upsert: true,
       });
 

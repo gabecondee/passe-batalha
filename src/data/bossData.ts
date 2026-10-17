@@ -1,7 +1,7 @@
 import { Boss } from '@/types/boss';
-import morthzulPortrait from '@/assets/boss-morthzul.jpg';
-import oculusSomnusPortrait from '@/assets/boss-oculus-somnus.png';
-import nargulPortrait from '@/assets/boss-nargul.png';
+import morthzulPortrait from '@/assets/boss-morthzul.webp';
+import oculusSomnusPortrait from '@/assets/boss-oculus-somnus.webp';
+import nargulPortrait from '@/assets/boss-nargul.webp';
 
 export const mockBosses: Boss[] = [
   // ============= MORTH'ZUL — Pornografia (Lendário) =============

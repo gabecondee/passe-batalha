@@ -25,6 +25,13 @@ function wrapper(){
   return ({children}:{children:React.ReactNode})=><QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 describe('real ranking shared by screens and achievement checks',()=>{
+  it('refreshes a changed avatar immediately after the profile is saved',async()=>{
+    const {result}=renderHook(()=>useGlobalRanking(),{wrapper:wrapper()});
+    await waitFor(()=>expect(result.current.isSuccess).toBe(true));
+    mock.profiles=mock.profiles.map(row=>row.id==='one'?{...row,avatar:'https://example.com/new.webp'}:row);
+    await act(async()=>{emit({type:'profile:updated',userId:'one'});});
+    await waitFor(()=>expect(result.current.ranking.find(row=>row.id==='one')?.avatar).toBe('https://example.com/new.webp'));
+  });
   it('includes only real database profiles and refreshes after an XP confirmation',async()=>{
     const {result}=renderHook(()=>useGlobalRanking(),{wrapper:wrapper()});
     await waitFor(()=>expect(result.current.isSuccess).toBe(true));

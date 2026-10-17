@@ -9,6 +9,7 @@ import {
 } from '@/contexts/BossContext';
 import { difficultyLabels, difficultyColors } from '@/types/boss';
 import { cn } from '@/lib/utils';
+import { localImageUrl } from '@/lib/localImages';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -137,10 +138,13 @@ export default function BossDetail() {
             )}>
               {boss.portrait ? (
                 <img 
-                  src={boss.portrait} 
+                  src={localImageUrl(boss.portrait)}
                   alt={displayName} 
                   className="w-full h-full object-cover"
-                  onError={(e) => { e.currentTarget.src = '/images/bosses/boss-morthzul.jpg' }}
+                  onError={(e) => {
+                    const fallback = localImageUrl('/images/bosses/boss-morthzul.jpg');
+                    if (e.currentTarget.getAttribute('src') !== fallback) e.currentTarget.src = fallback;
+                  }}
                 />
               ) : (
                 <div className="w-full h-full flex items-center justify-center">

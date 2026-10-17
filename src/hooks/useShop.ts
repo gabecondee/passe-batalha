@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { useStreakReward } from '@/hooks/useStreakReward';
+import { localImageUrl } from '@/lib/localImages';
 
 export interface ShopItem {
   id: string;
@@ -47,7 +48,7 @@ export function useShop() {
             description: d.description || '',
             cost: Number(d.cost) || 0,
             category: d.category as 'physical' | 'consumable',
-            image_url: d.image_url,
+            image_url: localImageUrl(d.image_url),
             shield_days: Number(d.shield_days) || 0,
             accent: (d.accent as 'gold' | 'blue') || (d.category === 'physical' ? 'gold' : 'blue'),
             status: Boolean(d.status),

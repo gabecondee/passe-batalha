@@ -1,6 +1,7 @@
 import {
     createClient
 } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
+import { ImageMagick, initializeImageMagick, MagickFormat } from 'npm:@imagemagick/magick-wasm@0.0.44';
 
 const corsHeaders = {
     "Access-Control-Allow-Origin": "*",
@@ -17,7 +18,49 @@ const CLASS_PROMPTS: Record<string, string> = {
 };
 
 const TEXT_MODEL = "gpt-5-mini";
-const IMAGE_MODEL = "dall-e-2";
+const IMAGE_MODEL = "gpt-image-2";
+
+let imageMagickReady: Promise<void> | undefined;
+
+function initializePortraitEncoder(): Promise<void> {
+    if (!imageMagickReady) {
+        imageMagickReady = (async () => {
+            // Resolve the package export: this version keeps the 32-bit WASM in dist/x86/.
+            const wasmUrl = new URL(import.meta.resolve('npm:@imagemagick/magick-wasm@0.0.44/magick.wasm'));
+            await initializeImageMagick(await Deno.readFile(wasmUrl));
+        })().catch((error) => {
+            imageMagickReady = undefined;
+            throw error;
+        });
+    }
+    return imageMagickReady;
+}
+
+/** Process the generated portrait before any Storage upload. */
+export async function optimizeGeneratedAvatar(original: Blob): Promise<Blob> {
+    if (!original.size || original.size > 5 * 1024 * 1024) {
+        throw new StepError('image_processing', 'A imagem gerada está vazia ou excede 5 MB.', 502);
+    }
+    try {
+        await initializePortraitEncoder();
+        const input = new Uint8Array(await original.arrayBuffer());
+        const encoded = ImageMagick.read(input, (image): Uint8Array => {
+            if (!image.width || !image.height || image.width * image.height > 4_194_304) {
+                throw new Error('Generated image dimensions exceed the portrait limit');
+            }
+            image.autoOrient();
+            const scale = Math.min(1, 512 / Math.max(image.width, image.height));
+            if (scale < 1) image.resize(Math.max(1, Math.round(image.width * scale)), Math.max(1, Math.round(image.height * scale)));
+            image.strip();
+            image.quality = 82;
+            return image.write(MagickFormat.WebP, data => Uint8Array.from(data));
+        });
+        if (!encoded.length) throw new Error('Portrait encoder returned an empty file');
+        return new Blob([encoded], { type: 'image/webp' });
+    } catch {
+        throw new StepError('image_processing', 'Não foi possível compactar o avatar. Tente novamente.', 502);
+    }
+}
 
 // -------- Erro estruturado por etapa, para o app tratar de forma coerente --------
 class StepError extends Error {
@@ -109,11 +152,13 @@ async function describeFace(openaiApiKey: string, imageUrl: string): Promise<str
     return description;
 }
 
-// -------- Etapa 2: gerar a imagem com gpt-image-1.5 (com 1 retry) --------
+// -------- Etapa 2: gerar a imagem (com 1 retry para falhas transitórias) --------
 async function generateAvatarImage(openaiApiKey: string, finalPrompt: string): Promise<Blob> {
     let lastErrorDetail = "";
+    let attempts = 0;
 
     for (let attempt = 1; attempt <= 2; attempt++) {
+        attempts = attempt;
         try {
             const imgResp = await fetchWithTimeout("https://api.openai.com/v1/images/generations", {
                 method: "POST",
@@ -126,12 +171,15 @@ async function generateAvatarImage(openaiApiKey: string, finalPrompt: string): P
                     prompt: finalPrompt,
                     n: 1,
                     size: "1024x1024",
+                    quality: "medium",
+                    output_format: "png",
                 }),
-            }, 45000);
+            }, 90000);
 
             if (!imgResp.ok) {
                 lastErrorDetail = `status ${imgResp.status}: ${await imgResp.text().catch(() => "")}`;
-                console.warn(`gpt-image-1.5 tentativa ${attempt} falhou: ${lastErrorDetail}`);
+                console.warn(`${IMAGE_MODEL} tentativa ${attempt} falhou: ${lastErrorDetail}`);
+                if (imgResp.status < 500 && imgResp.status !== 429) break;
                 continue;
             }
 
@@ -148,21 +196,23 @@ async function generateAvatarImage(openaiApiKey: string, finalPrompt: string): P
                 const dl = await fetchWithTimeout(url, {}, 20000);
                 if (!dl.ok) {
                     lastErrorDetail = `download da url falhou com status ${dl.status}`;
-                    console.warn(`gpt-image-1.5 tentativa ${attempt}: ${lastErrorDetail}`);
+                    console.warn(`${IMAGE_MODEL} tentativa ${attempt}: ${lastErrorDetail}`);
                     continue;
                 }
                 return await dl.blob();
             }
 
             lastErrorDetail = `resposta sem imagem usável: ${JSON.stringify(imgData).slice(0, 300)}`;
-            console.warn(`gpt-image-1.5 tentativa ${attempt}: ${lastErrorDetail}`);
+            console.warn(`${IMAGE_MODEL} tentativa ${attempt}: ${lastErrorDetail}`);
         } catch (e) {
             lastErrorDetail = e instanceof Error ? e.message : String(e);
-            console.error(`gpt-image-1.5 tentativa ${attempt} lançou erro:`, e);
+            console.error(`${IMAGE_MODEL} tentativa ${attempt} lançou erro:`, e);
+            // A timed-out generation may still complete upstream; do not create another.
+            if (e instanceof Error && e.name === 'AbortError') break;
         }
     }
 
-    throw new StepError("image_generation", `Falha ao gerar a imagem com ${IMAGE_MODEL} após 2 tentativas. Detalhe: ${lastErrorDetail}`, 502);
+    throw new StepError("image_generation", `Falha ao gerar a imagem com ${IMAGE_MODEL} após ${attempts} tentativa(s). Detalhe: ${lastErrorDetail}`, 502);
 }
 
 Deno.serve(async (req) => {
@@ -213,13 +263,18 @@ Deno.serve(async (req) => {
             `Apply this RPG class through clothing, armor, colors and aura: ${classDesc}. ` +
             `Dramatic anime lighting, dark fantasy background, subtle glow, magical particles, high detail, masterpiece.`;
 
-        const imageBlob = await generateAvatarImage(openaiApiKey, finalPrompt);
+        const originalImage = await generateAvatarImage(openaiApiKey, finalPrompt);
+        const imageBlob = await optimizeGeneratedAvatar(originalImage);
 
         // Etapa 3: upload no Supabase Storage
-        const fileName = `${user.id}/${Date.now()}.png`;
+        const fileName = `${user.id}/${crypto.randomUUID()}.webp`;
         const { error: uploadError } = await supabase.storage
             .from('avatars')
-            .upload(fileName, imageBlob, { contentType: 'image/png', upsert: true });
+            .upload(fileName, imageBlob, {
+                contentType: 'image/webp',
+                cacheControl: '31536000',
+                upsert: false,
+            });
 
         if (uploadError) {
             throw new StepError("storage", `Falha ao salvar a imagem: ${uploadError.message}`, 500);
@@ -230,6 +285,8 @@ Deno.serve(async (req) => {
         return new Response(JSON.stringify({
             avatarUrl: publicUrlData.publicUrl,
             generatedBy: IMAGE_MODEL,
+            imageFormat: 'webp',
+            imageBytes: imageBlob.size,
         }), {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
         });

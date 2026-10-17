@@ -10,11 +10,12 @@ import { useMissionPersistence } from '@/hooks/useMissionPersistence';
 import { emptyXp, useXpBalance } from '@/hooks/useXpBalance';
 import { MissionSaveDialog } from '@/components/missions/MissionSaveDialog';
 import type { CreateMissionData } from '@/services/missionPersistence';
+import { saveProfileAvatar } from '@/services/profileAvatar';
 
 interface GameContextType {
   // User
   user: User;
-  updateAvatar: (avatarUrl: string) => void;
+  updateAvatar: (avatarUrl: string | null) => Promise<void>;
   setEnergy: (energy: number) => void;
   
   // Onboarding
@@ -89,7 +90,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       // 1. Fetch Profile Progression
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
-        .select('energy, onboarding_completed, name, last_seen_level, class, birth_date, weight, height, gender')
+        .select('energy, onboarding_completed, name, avatar, last_seen_level, class, birth_date, weight, height, gender')
         .eq('id', authUserId)
         .single();
         
@@ -102,6 +103,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setEnergyOverride(profile.energy ?? 100);
         setHasCompletedOnboarding(!!profile.onboarding_completed);
         if (profile.name) setCustomName(profile.name);
+        setCustomAvatar(profile.avatar || null);
         if (profile.class) setUserClass(profile.class);
         if (profile.birth_date) setUserBirthDate(profile.birth_date.slice(0, 10));
         if (profile.weight !== null && profile.weight !== undefined) setUserWeight(Number(profile.weight));
@@ -182,19 +184,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [energyOverride, setEnergyOverride] = useState<number | null>(null);
-  const [customAvatar, setCustomAvatar] = useState<string | null>(() => {
-    return localStorage.getItem('user_avatar');
-  });
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [customName, setCustomName] = useState<string | null>(null);
   const [levelUpData, setLevelUpData] = useState<{ level: number; show: boolean }>({ level: 1, show: false });
   const [lastKnownLevel, setLastKnownLevel] = useState<number | null>(null);
 
-  const updateAvatar = useCallback((avatarUrl: string) => {
-    setCustomAvatar(avatarUrl);
-    localStorage.setItem('user_avatar', avatarUrl);
+  const updateAvatar = useCallback(async (avatarUrl: string | null) => {
+    if (!authUserId) throw new Error('Usuário não autenticado.');
+    const savedAvatar = await saveProfileAvatar(authUserId, avatarUrl);
+    setCustomAvatar(savedAvatar);
+    if (savedAvatar) localStorage.setItem('user_avatar', savedAvatar);
+    else localStorage.removeItem('user_avatar');
+    emit({ type: 'profile:updated', userId: authUserId });
     toast.success('🖼️ Avatar atualizado!');
-  }, []);
+  }, [authUserId]);
 
   const completeOnboarding = useCallback((data: { name: string; avatar: string | null; initialSkills?: Record<string, number>; class?: string }) => {
     if (data.class) setUserClass(data.class);
@@ -426,17 +430,19 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     if (!authUser) return;
     const { data: profile } = await supabase
       .from('profiles')
-      .select('name, class, birth_date, weight, height, gender')
+      .select('name, avatar, class, birth_date, weight, height, gender')
       .eq('id', authUser.id)
       .single();
 
     if (profile) {
       if (profile.name) setCustomName(profile.name);
+      setCustomAvatar(profile.avatar || null);
       if (profile.class) setUserClass(profile.class);
       setUserBirthDate(profile.birth_date ? profile.birth_date.slice(0, 10) : undefined);
       setUserWeight(profile.weight !== null && profile.weight !== undefined ? Number(profile.weight) : undefined);
       setUserHeight(profile.height !== null && profile.height !== undefined ? Number(profile.height) : undefined);
       setUserGender(profile.gender || undefined);
+      emit({ type: 'profile:updated', userId: authUser.id });
     }
   }, [authUser]);
 

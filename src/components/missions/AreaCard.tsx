@@ -2,11 +2,11 @@ import { AttributeType, Mission } from '@/types/game';
 import { cn } from '@/lib/utils';
 import { isMissionActive } from '@/lib/missionStatus';
 
-import areaPhysical from '@/assets/area-physical.jpg';
-import areaMental from '@/assets/area-mental.jpg';
-import areaProfessional from '@/assets/area-professional.jpg';
-import areaSpiritual from '@/assets/area-spiritual.jpg';
-import areaFinancial from '@/assets/area-financial.jpg';
+import areaPhysical from '@/assets/area-physical.webp';
+import areaMental from '@/assets/area-mental.webp';
+import areaProfessional from '@/assets/area-professional.webp';
+import areaSpiritual from '@/assets/area-spiritual.webp';
+import areaFinancial from '@/assets/area-financial.webp';
 
 interface AreaCardProps {
   attribute: AttributeType;
@@ -71,6 +71,8 @@ export function AreaCard({ attribute, missions, onClick }: AreaCardProps) {
         <img
           src={config.image}
           alt={config.label}
+          loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-card via-card/60 to-transparent" />

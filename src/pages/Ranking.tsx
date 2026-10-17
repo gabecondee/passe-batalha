@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trophy, TrendingUp, Users, Globe, Crown, Medal, Award, User as UserIcon } from 'lucide-react';
+import { Trophy, TrendingUp, Users, Globe, Crown, Medal, Award } from 'lucide-react';
+import { RankingAvatar } from '@/components/ranking/RankingAvatar';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { useGame } from '@/contexts/GameContext';
 import { useGlobalRanking } from '@/hooks/useGlobalRanking';
@@ -204,13 +205,7 @@ export default function Ranking() {
                           u.rank > 3 && 'border-primary/40',
                         )}
                       >
-                        {u.avatar ? (
-                          <img src={u.avatar} alt={u.name} className="h-full w-full object-cover" />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-secondary/60">
-                            <UserIcon className="h-5 w-5 text-muted-foreground" />
-                          </div>
-                        )}
+                        <RankingAvatar src={u.avatar} name={u.name} />
                       </div>
 
                       {/* Info */}

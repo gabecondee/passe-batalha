@@ -27,7 +27,7 @@ export function useGlobalRanking() {
     },
   });
   useEffect(() => on(event => {
-    if (['xp:refresh', 'achievement:unlocked', 'workout:changed', 'boss:hit', 'fragments:changed'].includes(event.type)) {
+    if (['profile:updated', 'xp:refresh', 'achievement:unlocked', 'workout:changed', 'boss:hit', 'fragments:changed'].includes(event.type)) {
       void queryClient.invalidateQueries({ queryKey: ['global-ranking', userId] });
     }
   }), [queryClient, userId]);

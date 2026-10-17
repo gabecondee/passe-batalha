@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, Star, TrendingUp } from 'lucide-react';
-import hakimMascot from '@/assets/hakim-mascot.png';
+import hakimMascot from '@/assets/hakim-mascot.webp';
 
 interface LevelUpOverlayProps {
   level: number;

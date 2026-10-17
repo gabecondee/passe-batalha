@@ -92,19 +92,23 @@ export default function ProfileSettings() {
     setCompressing(true);
     try {
       const compressed = await compressProfileImage(file);
-      updateAvatar(compressed);
-      toast.success('Foto atualizada! Clique em Salvar para confirmar.');
+      await updateAvatar(compressed);
     } catch {
-      toast.error('Erro ao processar a imagem. Tente outra.');
+      toast.error('Não foi possível salvar a foto. Tente novamente.');
     } finally {
       setCompressing(false);
     }
   };
 
-  const removePhoto = () => {
-    localStorage.removeItem('user_avatar');
-    toast.success('Foto removida');
-    window.location.reload();
+  const removePhoto = async () => {
+    setCompressing(true);
+    try {
+      await updateAvatar(null);
+    } catch {
+      toast.error('Não foi possível remover a foto. Tente novamente.');
+    } finally {
+      setCompressing(false);
+    }
   };
 
   const save = async () => {
@@ -174,7 +178,7 @@ export default function ProfileSettings() {
                 <><Camera className="w-4 h-4" /> Alterar Foto</>
               )}
             </label>
-            <button onClick={removePhoto} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-display hover:bg-destructive/10">
+            <button disabled={compressing} onClick={removePhoto} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-destructive/50 text-destructive text-xs font-display hover:bg-destructive/10">
               <Trash2 className="w-4 h-4" /> Remover
             </button>
           </div>

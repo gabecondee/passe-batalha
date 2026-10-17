@@ -155,23 +155,25 @@ REGRAS DA CAMPANHA DE 30 DIAS:
           method: "POST",
           headers: { Authorization: `Bearer ${openaiApiKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "dall-e-3",
+            model: "gpt-image-2",
             prompt: bossContent.imagePrompt,
             n: 1,
             size: "1024x1024",
-            quality: "standard",
+            quality: "medium",
+            output_format: "png",
           }),
         });
         if (imgResp.ok) {
           const imgData = await imgResp.json();
-          portraitUrl = imgData.data?.[0]?.url || null;
+          const base64 = imgData.data?.[0]?.b64_json;
+          portraitUrl = base64 ? `data:image/png;base64,${base64}` : imgData.data?.[0]?.url || null;
         }
       } catch (e) {
-        console.error("DALL-E image generation error:", e);
+        console.error("GPT Image generation error:", e);
       }
     }
 
-    // Fallback to high-quality RPG Pollinations image generation if DALL-E key is not present or failed
+    // Keep the existing fallback when OpenAI image generation is unavailable.
     if (!portraitUrl) {
       const cleanPrompt = encodeURIComponent(`${input.problem} dark fantasy rpg boss monster portrait cinematic detailed 8k`);
       portraitUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=512&height=512&seed=${Date.now()}&nologo=true`;

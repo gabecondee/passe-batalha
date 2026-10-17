@@ -32,9 +32,9 @@ export default function Profile() {
     setCompressing(true);
     try {
       const compressed = await compressProfileImage(file);
-      updateAvatar(compressed);
+      await updateAvatar(compressed);
     } catch {
-      toast.error('Erro ao processar a imagem. Tente outra.');
+      toast.error('Não foi possível salvar a foto. Tente novamente.');
     } finally {
       setCompressing(false);
     }

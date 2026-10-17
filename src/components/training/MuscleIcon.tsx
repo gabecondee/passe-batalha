@@ -1,20 +1,20 @@
 import { MuscleId } from '@/lib/workoutStorage';
-import chest from '@/assets/muscles/chest.png';
-import back from '@/assets/muscles/back.png';
-import shoulders from '@/assets/muscles/shoulders.png';
-import trapezius from '@/assets/muscles/trapezius.png';
-import biceps from '@/assets/muscles/biceps.png';
-import triceps from '@/assets/muscles/triceps.png';
-import forearms from '@/assets/muscles/forearms.png';
-import abs from '@/assets/muscles/abs.png';
-import glutes from '@/assets/muscles/glutes.png';
-import quads from '@/assets/muscles/quads.png';
-import hamstrings from '@/assets/muscles/hamstrings.png';
-import adductors from '@/assets/muscles/adductors.png';
-import abductors from '@/assets/muscles/abductors.png';
-import calves from '@/assets/muscles/calves.png';
-import cardio from '@/assets/muscles/cardio.png';
-import full_body from '@/assets/muscles/full_body.png';
+import chest from '@/assets/muscles/chest.webp';
+import back from '@/assets/muscles/back.webp';
+import shoulders from '@/assets/muscles/shoulders.webp';
+import trapezius from '@/assets/muscles/trapezius.webp';
+import biceps from '@/assets/muscles/biceps.webp';
+import triceps from '@/assets/muscles/triceps.webp';
+import forearms from '@/assets/muscles/forearms.webp';
+import abs from '@/assets/muscles/abs.webp';
+import glutes from '@/assets/muscles/glutes.webp';
+import quads from '@/assets/muscles/quads.webp';
+import hamstrings from '@/assets/muscles/hamstrings.webp';
+import adductors from '@/assets/muscles/adductors.webp';
+import abductors from '@/assets/muscles/abductors.webp';
+import calves from '@/assets/muscles/calves.webp';
+import cardio from '@/assets/muscles/cardio.webp';
+import full_body from '@/assets/muscles/full_body.webp';
 import { cn } from '@/lib/utils';
 
 const IMAGES: Record<MuscleId, string> = {
@@ -54,6 +54,9 @@ export function MuscleIcon({ id, active = false, className }: MuscleIconProps) {
       alt=""
       aria-hidden="true"
       loading="lazy"
+      decoding="async"
+      width={256}
+      height={256}
       draggable={false}
       className={cn(
         'h-full w-full object-contain transition-all duration-200',

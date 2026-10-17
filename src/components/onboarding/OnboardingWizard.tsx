@@ -8,13 +8,14 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { authService } from '@/services/auth';
+import { edgeFunctionErrorMessage } from '@/lib/edgeFunctionError';
 import { useAuth } from '@/contexts/AuthContext';
 import { StepIndicator } from './StepIndicator';
-import hakimImage from '@/assets/hakim-mascot.png';
-import hakimV2 from '@/assets/hakim-mascot-v2.jpeg';
+import hakimImage from '@/assets/hakim-mascot.webp';
+import hakimV2 from '@/assets/hakim-mascot-v2.webp';
 import hakimV3 from '@/assets/hakim-mascot-v3.jpeg';
 import hakimOwlRunesAsset from '@/assets/hakim-owl-runes.png.asset.json';
-import hakim2 from '@/assets/hakim2.png';
+import hakim2 from '@/assets/hakim2.webp';
 
 import logoSrc from '@/assets/logo.png';
 import hakimOwlMentor from '@/assets/hakim-owl-mentor.png';
@@ -24,11 +25,11 @@ import hakimSummaryOwlAsset from '@/assets/hakim-summary-owl.png.asset.json';
 import { SkillsRadar } from '@/components/dashboard/SkillsRadar';
 import { Star } from 'lucide-react';
 import passeBatalhaLogo from '@/assets/passe-batalha-logo.png';
-import curandeiroImg from '@/assets/class-curandeiro.png';
-import warriorImg from '@/assets/class-warrior-v2.jpeg';
-import mageImg from '@/assets/class-mage-v2.jpeg';
-import rogueImg from '@/assets/class-rogue-v2.jpeg';
-import paladinImg from '@/assets/class-paladin-v2.jpeg';
+import curandeiroImg from '@/assets/class-curandeiro.webp';
+import warriorImg from '@/assets/class-warrior-v2.webp';
+import mageImg from '@/assets/class-mage-v2.webp';
+import rogueImg from '@/assets/class-rogue-v2.webp';
+import paladinImg from '@/assets/class-paladin-v2.webp';
 import useEmblaCarousel from 'embla-carousel-react';
 import { useEffect } from 'react';
 
@@ -135,7 +136,7 @@ export function OnboardingWizard({ onComplete, initialAuthView = 'intro' }: Onbo
       
       if (error) {
         console.error("Function Error:", error);
-        throw error;
+        throw new Error(await edgeFunctionErrorMessage(error));
       }
       
       if (data?.avatarUrl) {
@@ -163,13 +164,14 @@ export function OnboardingWizard({ onComplete, initialAuthView = 'intro' }: Onbo
         id: authData.user.id,
         name: name.trim(),
         class: chosenClass,
+        avatar: generatedAvatar,
         avatar_url: generatedAvatar || '/placeholder.svg',
-        onboarding_completed: true
-      });
+      }).select('id').single();
 
       if (profileError) {
         toast.error('Aviso: Não foi possível atualizar o perfil.');
         console.error('Erro Supabase (Profile Update):', profileError);
+        return;
       }
 
       // Inserir os atributos iniciais na tabela user_attributes
@@ -180,6 +182,15 @@ export function OnboardingWizard({ onComplete, initialAuthView = 'intro' }: Onbo
 
       if (attrError) {
         console.error('Erro Supabase (Attributes Upsert):', attrError);
+        toast.error('Não foi possível salvar os atributos. Tente novamente.');
+        return;
+      }
+
+      const { error: completionError } = await supabase.from('profiles')
+        .update({ onboarding_completed: true }).eq('id', authData.user.id).select('id').single();
+      if (completionError) {
+        toast.error('Não foi possível concluir o cadastro. Tente novamente.');
+        return;
       }
     }
 
@@ -1578,6 +1589,8 @@ function ClassCarousel({
                     <img
                       src={c.img}
                       alt={c.name}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover"
                       draggable={false}
                     />

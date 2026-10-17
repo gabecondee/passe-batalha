@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useNavigate } from 'react-router-dom';
 import { useState, useMemo } from 'react';
 import { BossQuizDialog } from '@/components/bosses/BossQuizDialog';
+import { localImageUrl } from '@/lib/localImages';
 
 type FilterKind = 'all' | 'active';
 
@@ -218,11 +219,14 @@ export default function Bosses() {
                               <Lock className="w-6 h-6 text-muted-foreground" />
                             ) : boss.portrait ? (
                               <img 
-                                src={boss.portrait} 
+                                src={localImageUrl(boss.portrait)}
                                 alt={displayName} 
                                 className="w-full h-full object-cover" 
                                 loading="lazy" 
-                                onError={(e) => { e.currentTarget.src = '/images/bosses/boss-morthzul.jpg' }}
+                                onError={(e) => {
+                                  const fallback = localImageUrl('/images/bosses/boss-morthzul.jpg');
+                                  if (e.currentTarget.getAttribute('src') !== fallback) e.currentTarget.src = fallback;
+                                }}
                               />
                             ) : (
                               <Skull className={cn('w-8 h-8', boss.defeated ? 'text-green-400' : 'text-amber-400')} />

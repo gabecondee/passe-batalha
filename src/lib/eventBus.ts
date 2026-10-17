@@ -6,6 +6,7 @@
 import { useEffect } from 'react';
 
 export type BusEvent =
+  | { type: 'profile:updated'; userId: string }
   | { type: 'xp:refresh' }
   | { type: 'xp:gained'; area?: string; amount: number; source: string }
   | { type: 'mission:created'; missionId: string }

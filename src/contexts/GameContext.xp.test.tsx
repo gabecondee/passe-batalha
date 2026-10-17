@@ -3,7 +3,8 @@ import { act, cleanup, fireEvent, renderHook, screen, waitFor } from '@testing-l
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GameProvider, useGame } from './GameContext';
 
-const db=vi.hoisted(()=>({user:{id:'one'},profileError:false,balanceReady:true,reads:[] as string[]}));
+const db=vi.hoisted(()=>({user:{id:'one'},profileError:false,balanceReady:true,reads:[] as string[],avatar:null as string|null,saveAvatar:vi.fn()}));
+vi.mock('@/services/profileAvatar',()=>({saveProfileAvatar:db.saveAvatar}));
 vi.mock('@/contexts/AuthContext',()=>({useAuth:()=>({user:db.user})}));
 vi.mock('sonner',()=>({toast:{success:vi.fn(),error:vi.fn()}}));
 vi.mock('@/components/missions/MissionSaveDialog',()=>({MissionSaveDialog:()=>null}));
@@ -16,7 +17,7 @@ vi.mock('@/hooks/useXpBalance',()=>({
 vi.mock('@/integrations/supabase/client',()=>({supabase:{from:(table:string)=>{
   const read=async()=>{
     db.reads.push(table);
-    if(table==='profiles')return {data:db.profileError?null:{name:'One',onboarding_completed:true,last_seen_level:3},
+    if(table==='profiles')return {data:db.profileError?null:{name:'One',avatar:db.avatar,onboarding_completed:true,last_seen_level:3},
       error:db.profileError?new Error('offline'):null};
     if(table==='user_attributes')return {data:{initial_xp:{physical:80,mental:80,spiritual:70,professional:80,financial:100}},error:null};
     return {data:[],error:null};
@@ -26,9 +27,29 @@ vi.mock('@/integrations/supabase/client',()=>({supabase:{from:(table:string)=>{
   return query;
 }}}));
 const wrapper=({children}:{children:React.ReactNode})=><GameProvider>{children}</GameProvider>;
-beforeEach(()=>{db.user={id:'one'};db.profileError=false;db.balanceReady=true;db.reads=[];localStorage.clear();});
+beforeEach(()=>{db.user={id:'one'};db.profileError=false;db.balanceReady=true;db.reads=[];db.avatar=null;db.saveAvatar.mockReset();localStorage.clear();});
 afterEach(cleanup);
 describe('character XP and loading boundaries',()=>{
+  it('loads the shared avatar instead of a stale browser-only image',async()=>{
+    db.avatar='https://example.com/current.webp';
+    localStorage.setItem('user_avatar','https://example.com/stale.png');
+    const {result}=renderHook(()=>useGame(),{wrapper});
+    await waitFor(()=>expect(result.current?.user.avatar).toBe(db.avatar));
+  });
+  it('only replaces the displayed avatar after persistence succeeds',async()=>{
+    db.avatar='https://example.com/old.webp';
+    const {result}=renderHook(()=>useGame(),{wrapper});
+    await waitFor(()=>expect(result.current?.progressionReady).toBe(true));
+    db.saveAvatar.mockRejectedValueOnce(new Error('offline'));
+    await act(async()=>{
+      await expect(result.current.updateAvatar('data:image/jpeg;base64,AAAA')).rejects.toThrow('offline');
+    });
+    expect(result.current.user.avatar).toBe(db.avatar);
+    db.saveAvatar.mockResolvedValueOnce('https://example.com/new.webp');
+    await act(async()=>{await result.current.updateAvatar('data:image/jpeg;base64,AAAA');});
+    expect(result.current.user.avatar).toBe('https://example.com/new.webp');
+    expect(localStorage.getItem('user_avatar')).toBe('https://example.com/new.webp');
+  });
   it('uses persisted earned XP for the level, keeping the onboarding assessment separate',async()=>{
     const {result,rerender}=renderHook(()=>useGame(),{wrapper});
     await waitFor(()=>expect(result.current?.progressionReady).toBe(true));

@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import npcImage from '@/assets/npc-guide.png';
+import npcImage from '@/assets/npc-guide.webp';
 
 interface NpcGuideProps {
   /** Whether the NPC is visible */

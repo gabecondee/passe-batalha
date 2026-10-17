@@ -19,7 +19,7 @@ import { useGame } from '@/contexts/GameContext';
 import { useFinances } from '@/hooks/useFinances';
 import { useStreakReward } from '@/hooks/useStreakReward';
 import { cn, formatCompactNumber } from '@/lib/utils';
-import mochilaImg from '@/assets/mochila.png';
+import mochilaImg from '@/assets/mochila.webp';
 
 interface ShortcutCard {
   id: string;

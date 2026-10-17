@@ -131,6 +131,8 @@ export default function Shop() {
               <img
                 src={item.image_url}
                 alt={item.name}
+                loading="lazy"
+                decoding="async"
                 className={cn('w-full h-full object-cover', redeemed && 'brightness-90')}
               />
               <div

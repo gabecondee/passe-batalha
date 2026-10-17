@@ -1,6 +1,7 @@
 import { RankingUser } from '@/types/game';
 import { cn } from '@/lib/utils';
 import { Trophy, Medal, Award } from 'lucide-react';
+import { RankingAvatar } from './RankingAvatar';
 
 interface RankingTableProps {
   users: RankingUser[];
@@ -55,11 +56,7 @@ export function RankingTable({ users, currentUserId }: RankingTableProps) {
                   user.rank === 3 && "border-amber-600",
                   user.rank > 3 && "border-border"
                 )}>
-                  <img 
-                    src={user.avatar} 
-                    alt={user.name}
-                    className="w-full h-full object-cover"
-                  />
+                  <RankingAvatar src={user.avatar} name={user.name} />
                 </div>
                 <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
                   {user.level}
