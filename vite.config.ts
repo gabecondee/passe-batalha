@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 import { VitePWA } from "vite-plugin-pwa";
+import { storageImageCachePattern } from "./src/lib/storageImageCache";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -10,7 +11,6 @@ export default defineConfig(({ mode }) => {
   const storageOrigin = env.VITE_SUPABASE_URL
     ? new URL(env.VITE_SUPABASE_URL).origin
     : null;
-  const escapedOrigin = storageOrigin?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return ({
   // Keep small WebP icons out of the initial JavaScript so lazy loading works.
   build: { assetsInlineLimit: 0 },
@@ -45,20 +45,20 @@ export default defineConfig(({ mode }) => {
               purgeOnQuotaError: true,
             },
           },
-        }, ...(escapedOrigin ? [{
-          // Only public portraits from this project; API/auth responses are excluded.
-          urlPattern: new RegExp(`^${escapedOrigin}/storage/v1/object/public/(?:avatars|boss-portraits)/`),
+        }, {
+          // Profiles may reference portraits hosted in a different Supabase project.
+          urlPattern: storageImageCachePattern(storageOrigin),
           handler: 'CacheFirst' as const,
           options: {
             cacheName: 'supabase-public-portraits-v1',
             cacheableResponse: { statuses: [0, 200] },
             expiration: {
               maxEntries: 100,
-              maxAgeSeconds: 7 * 24 * 60 * 60,
+              maxAgeSeconds: 30 * 24 * 60 * 60,
               purgeOnQuotaError: true,
             },
           },
-        }] : [])],
+        }],
       },
       manifest: {
         name: 'Passe de Batalha',
