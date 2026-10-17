@@ -1,0 +1,14 @@
+# Serve React routes when opened directly or refreshed (Apache/LiteSpeed).
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+  RewriteRule ^index\.html$ - [L]
+
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Missing static files keep their real 404 instead of returning HTML.
+  RewriteRule ^(?:assets|images)/ - [L]
+  RewriteRule . /index.html [L]
+</IfModule>

@@ -9,7 +9,8 @@ export const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, isLoading } = useAuth();
   const subStatus = useSubscriptionStatus(user?.id);
 
-  if (isLoading || subStatus === 'checking') {
+  // A signed-out visitor has no subscription to check and must reach login.
+  if (isLoading || (user && subStatus === 'checking')) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0c1830]">
         <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
