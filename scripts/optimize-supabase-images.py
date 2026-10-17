@@ -82,6 +82,16 @@ class Api:
         self.base = base.rstrip("/")
         self.key = key
         self.opener = build_opener(NoRedirect())
+        self.backup_root = None
+        self.backup_objects = {}
+
+    def use_backup(self, directory):
+        root = Path(directory).resolve()
+        manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+        if not manifest.get("complete") or manifest.get("project", "").rstrip("/") != self.base:
+            raise MigrationError("backup-incomplete-or-wrong-project")
+        self.backup_root = root
+        self.backup_objects = {(entry["bucket"], entry["path"]): entry for entry in manifest["objects"]}
 
     def request(self, method, path, *, query=None, data=None, headers=None):
         url = self.base + path + ("?" + urlencode(query) if query else "")
@@ -117,7 +127,16 @@ class Api:
             raise MigrationError("unexpected-user-record")
         return rows
 
-    def download(self, bucket, key):
+    def download(self, bucket, key, *, live=False):
+        entry = self.backup_objects.get((bucket, key)) if not live else None
+        if entry:
+            path = (self.backup_root / entry["localFile"]).resolve()
+            if not path.is_relative_to(self.backup_root):
+                raise MigrationError("invalid-backup-file-path")
+            data = path.read_bytes()
+            if len(data) != entry["bytes"] or hashlib.sha256(data).hexdigest() != entry["sha256"]:
+                raise MigrationError("backup-file-integrity-failed")
+            return data
         return self.request("GET", "/storage/v1/object/public/" + quote(bucket, safe="") + "/" + quote(key, safe="/"))
 
     def upload(self, bucket, key, encoded):
@@ -129,7 +148,7 @@ class Api:
                 raise
             # A previous run may have uploaded this content-addressed file.
             # It is safe to reuse only if its bytes match exactly.
-        if self.download(bucket, key) != encoded:
+        if self.download(bucket, key, live=True) != encoded:
             raise MigrationError("uploaded-file-verification-failed")
 
     def public_url(self, bucket, key):
@@ -189,6 +208,7 @@ def main():
     parser.add_argument("--after-id", help="Continue after the next_after_id reported by an earlier batch")
     parser.add_argument("--user-id", help="Restrict profiles or custom_bosses to exactly this app user")
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--source-backup", type=Path, help="Reuse verified local originals from a completed backup")
     args = parser.parse_args()
     if not 1 <= args.limit <= 100 or not 1 <= args.max_scan <= 10000:
         parser.error("Invalid batch limits")
@@ -199,6 +219,8 @@ def main():
     if not base or not key:
         parser.error("Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY locally. Never use a VITE_ variable for the administrative key.")
     api = Api(base, key)
+    if args.source_backup:
+        api.use_backup(args.source_backup)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     path = args.report or Path(__file__).resolve().parents[1] / ".storage-image-optimization" / (timestamp + ".json")
     if path.exists():

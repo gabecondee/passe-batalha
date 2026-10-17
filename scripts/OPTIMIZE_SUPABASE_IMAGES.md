@@ -33,6 +33,44 @@ nunca a envie pelo chat. Essa rotina roda fora do aplicativo.
 
 ## Testar e executar
 
+Para manter a migração separada do ambiente do app, pode usar um arquivo privado
+`.env.storage-production` (ignorado pelo Git), contendo `SUPABASE_URL`,
+`SUPABASE_SERVICE_ROLE_KEY` e, se necessário, `PYTHON_EXECUTABLE`.
+Ao informar `--env-file`, o executor exige URL e credencial nesse arquivo e não
+carrega `.env` ou `.env.local`:
+
+```powershell
+node scripts/optimize-supabase-images.mjs --env-file .env.storage-production --table profiles --limit 3
+```
+
+Esse comando apenas simula; não acrescentar `--apply` antes de conferir o relatório.
+
+## Backup completo das imagens antes da migração
+
+```powershell
+node scripts/backup-supabase-images.mjs .env.storage-production
+```
+
+O utilitário está restrito ao projeto de produção deste app e só lê o Supabase.
+Ele salva os arquivos dos buckets de imagens, as referências de `profiles`
+(incluindo `avatar_url`), `custom_bosses` e `shop_items`, os tamanhos e os hashes
+SHA-256 em uma pasta privada `production-backup-*` dentro de
+`.storage-image-optimization/`. O indicador `complete` do manifesto só fica
+verdadeiro ao terminar todos os downloads. A credencial não entra no backup.
+
+Para reutilizar os originais desse backup durante a migração e evitar outro
+download dos mesmos arquivos, acrescente:
+
+```powershell
+node scripts/optimize-supabase-images.mjs --env-file .env.storage-production --table profiles --limit 10 --source-backup .storage-image-optimization/production-backup-DATA --apply
+```
+
+Use o caminho real criado pelo backup. O executor exige um manifesto completo
+do mesmo projeto e verifica o hash dos arquivos locais antes de compactá-los.
+A conferência do upload sempre baixa a versão nova do Supabase, sem usar o cache
+do backup. Objetos e referências criados depois do snapshot podem não fazer parte
+dele; os relatórios de cada lote continuam sendo necessários para recuperação.
+
 Para um piloto restrito à sua conta, obtenha o ID do seu usuário no painel e use:
 
 ```powershell

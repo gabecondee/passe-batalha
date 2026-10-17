@@ -54,6 +54,31 @@ class FakeApi:
 
 
 class MigrationTests(unittest.TestCase):
+    def test_backup_reuses_verified_bytes_and_live_checks_bypass_it(self):
+        with temporary_directory() as directory:
+            root = Path(directory)
+            data = b"original-image"
+            (root / "image.bin").write_bytes(data)
+            manifest = {"complete": True, "project": BASE, "objects": [{"bucket": "avatars", "path": "user/old.png", "localFile": "image.bin", "bytes": len(data), "sha256": migration.hashlib.sha256(data).hexdigest()}]}
+            (root / "manifest.json").write_text(json.dumps(manifest))
+            api = migration.Api(BASE, "test-key")
+            api.request = Mock(return_value=b"live-image")
+            api.use_backup(root)
+            self.assertEqual(api.download("avatars", "user/old.png"), data)
+            api.request.assert_not_called()
+            self.assertEqual(api.download("avatars", "user/old.png", live=True), b"live-image")
+            (root / "image.bin").write_bytes(b"tampered-image")
+            with self.assertRaises(migration.MigrationError):
+                api.download("avatars", "user/old.png")
+
+    def test_backup_rejects_another_project_or_incomplete_snapshot(self):
+        with temporary_directory() as directory:
+            root = Path(directory)
+            for project, complete in [(BASE, False), ("https://another.supabase.co", True)]:
+                (root / "manifest.json").write_text(json.dumps({"project": project, "complete": complete, "objects": []}))
+                with self.assertRaises(migration.MigrationError):
+                    migration.Api(BASE, "test-key").use_backup(root)
+
     def test_accepts_only_own_public_storage(self):
         self.assertEqual(migration.source_object(OLD, BASE), ("avatars", "user/old.png"))
         for value in [None, "/images/local.png", "data:image/png;base64,AAA",
