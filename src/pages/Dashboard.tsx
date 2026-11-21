@@ -57,7 +57,7 @@ export default function Dashboard() {
   const { user, missions, attributes, completeMission, completeDailyAction,
     missionsLoading, missionsError, refreshMissions, missionMutationPending } = useGame();
   const { getActiveBattles, getTodayBossAction, recordDayAction, getProgress } = useBoss();
-  const { state: streakRewardState } = useStreakReward();
+  const { state: streakRewardState, ready: economyReady, error: economyError, refresh: refreshEconomy } = useStreakReward();
   const { eventsByDate, toggleComplete } = useAgenda();
   const navigate = useNavigate();
 
@@ -92,7 +92,7 @@ export default function Dashboard() {
   const dailyMissions = allDailyMissions.filter((m) => !(m.completedDates ?? []).includes(todayISO));
 
   const activeBattles = getActiveBattles();
-  const currentStreak = streakRewardState.streak_days ?? 0;
+  const currentStreak = economyReady ? streakRewardState.streak_days : '—';
 
   const todayEvents = eventsByDate(new Date());
   const pendingTodayEvents = todayEvents.filter((e) => !e.completed);
@@ -101,6 +101,9 @@ export default function Dashboard() {
     <MainLayout>
       <EnergyCheckin />
       <div className="max-w-md mx-auto pb-8">
+        {economyError && <div role="alert" className="mb-3 text-sm text-destructive">
+          {economyError} <button type="button" className="underline" onClick={() => void refreshEconomy()}>Tentar novamente</button>
+        </div>}
         {/* ===== TOP BAR: Fragments + Loja ===== */}
         <div className="flex items-start justify-between mb-2">
           <div className="flex flex-col items-start gap-1.5">
@@ -111,7 +114,7 @@ export default function Dashboard() {
             >
               <Gem className="w-4 h-4 text-sky-400" />
               <span className="font-display text-sm text-foreground tracking-wider">
-                {streakRewardState.total_fragments.toLocaleString('pt-BR')}
+                {economyReady ? streakRewardState.total_fragments.toLocaleString('pt-BR') : '—'}
               </span>
             </motion.div>
 

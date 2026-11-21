@@ -35,7 +35,7 @@ export default function StatisticsSettings() {
   const { summary: finance, transactions } = useFinances();
   const { summary: achSummary, byRarity, achievements } = useAchievementsData();
   const { battles, bosses } = useBoss();
-  const { state: streak } = useStreakReward();
+  const { state: streak, ready: economyReady } = useStreakReward();
 
   const now = new Date();
   const completedMissions = missions.filter(m => m.status === 'completed').length;
@@ -67,8 +67,8 @@ export default function StatisticsSettings() {
         <Section title="Evolução">
           <Stat label="XP Total" value={user.earnedTotalXP} />
           <Stat label="Nível atual" value={user.level} />
-          <Stat label="Dias consecutivos" value={streak.streak_days} />
-          <Stat label="Maior sequência" value={streak.best_streak} />
+          <Stat label="Dias consecutivos" value={economyReady ? streak.streak_days : '—'} />
+          <Stat label="Maior sequência" value={economyReady ? streak.best_streak : '—'} />
           {attributes.map(a => (
             <Stat key={a.type} label={`XP ${a.name}`} value={a.xp} />
           ))}
@@ -118,7 +118,7 @@ export default function StatisticsSettings() {
           <Stat label="Posição global" value={String(userInRank)} />
           <Stat label="Bosses derrotados" value={bossWins} />
           <Stat label="Derrotas" value={bossLosses} />
-          <Stat label="Fragmentos" value={streak.total_fragments} />
+          <Stat label="Fragmentos" value={economyReady ? streak.total_fragments : '—'} />
         </Section>
       </div>
     </MainLayout>

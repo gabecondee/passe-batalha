@@ -1,6 +1,7 @@
 import { User } from '@/types/game';
 import { Zap, Flame, TrendingUp, Shield } from 'lucide-react';
 import { HexagonRank, RankLevel } from '@/components/ui/HexagonRank';
+import { useStreakReward } from '@/hooks/useStreakReward';
 
 interface CharacterCardProps {
   user: User;
@@ -17,20 +18,11 @@ function getLevelRank(level: number): RankLevel {
   return 'E';
 }
 
-function getStreak(): number {
-  try {
-    const raw = localStorage.getItem('streak-reward-state-v1');
-    if (!raw) return 0;
-    return JSON.parse(raw).streak_days ?? 0;
-  } catch {
-    return 0;
-  }
-}
-
 export function CharacterCard({ user }: CharacterCardProps) {
   const xpProgress = (user.currentXP / user.xpToNextLevel) * 100;
   const rank = getLevelRank(user.level);
-  const streak = getStreak();
+  const { state, ready, error, refresh } = useStreakReward();
+  const streak = ready ? state.streak_days : '—';
 
   return (
     <div className="character-frame relative overflow-hidden">
@@ -110,6 +102,7 @@ export function CharacterCard({ user }: CharacterCardProps) {
           <div className="flex items-center gap-1.5 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
             <Zap className="w-3 h-3 md:w-3.5 md:h-3.5 text-orange-400" />
             <span className="text-[11px] md:text-xs font-display text-orange-400">{streak} dias</span>
+            {error && <button type="button" onClick={() => void refresh()} className="text-xs text-destructive" title={error}>Tentar novamente</button>}
           </div>
         </div>
 

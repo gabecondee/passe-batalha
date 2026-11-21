@@ -235,24 +235,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }).eq('id', authUser.id).then();
     }
 
-    try {
-      const STREAK_KEY = 'streak-reward-state-v1';
-      const raw = localStorage.getItem(STREAK_KEY);
-      const current = raw ? JSON.parse(raw) : {};
-      const seeded = {
-        streak_days: 0,
-        best_streak: current.best_streak ?? 0,
-        last_checkin_date: null,
-        total_fragments: 0,
-        last_bonus_claimed: 0,
-        total_streaks_completed: current.total_streaks_completed ?? 0,
-        fragment_history: [],
-        streak_shields: current.streak_shields ?? 0,
-        shop_purchases: current.shop_purchases ?? [],
-      };
-      localStorage.setItem(STREAK_KEY, JSON.stringify(seeded));
-      window.dispatchEvent(new CustomEvent('streak-reward:sync'));
-    } catch { /* ignore */ }
+    window.dispatchEvent(new CustomEvent('streak-reward:sync'));
 
     toast.success(`⚔️ Bem-vindo, ${data.name}! Sua jornada começou!`);
   }, [authUser]);

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
-import { useStreakReward } from '@/hooks/useStreakReward';
+import { readEconomy, updateEconomy } from '@/services/economy';
 import { localImageUrl } from '@/lib/localImages';
 
 export interface ShopItem {
@@ -26,7 +26,6 @@ export interface UserRedemption {
 
 export function useShop() {
   const { user } = useAuth();
-  const { state: economyState } = useStreakReward();
   const [items, setItems] = useState<ShopItem[]>([]);
   const [redemptions, setRedemptions] = useState<UserRedemption[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +54,6 @@ export function useShop() {
           }))
         );
       }
-
       // 2. Fetch user redemptions if user is logged in
       if (user) {
         const { data: redData } = await supabase
@@ -112,10 +110,6 @@ export function useShop() {
     async (item: ShopItem): Promise<{ success: boolean; message?: string }> => {
       if (!user) return { success: false, message: 'Usuário não autenticado.' };
 
-      // 1. Check if user has enough fragments
-      if (economyState.total_fragments < item.cost) {
-        return { success: false, message: 'Fragmentos insuficientes.' };
-      }
 
       // 2. Physical item rule: can ONLY be redeemed 1 time strictly!
       if (item.category === 'physical' && redeemedItemIds.has(item.id)) {
@@ -127,8 +121,12 @@ export function useShop() {
         return { success: false, message: 'Item indisponível no momento.' };
       }
 
-      const newFragments = economyState.total_fragments - item.cost;
-      const newShields = economyState.streak_shields + (item.shield_days || 0);
+      try {
+        const current = await readEconomy(user.id);
+        if ((current.total_fragments ?? 0) < item.cost) return { success: false, message: 'Fragmentos insuficientes.' };
+      } catch {
+        return { success: false, message: 'Não foi possível consultar seu saldo. Tente novamente.' };
+      }
 
       // 4. Insert redemption in DB
       const { data: insertedRedemption, error: redErr } = await supabase
@@ -147,16 +145,21 @@ export function useShop() {
       }
 
       // 5. Update user_economy in DB
-      const { error: econErr } = await supabase
-        .from('user_economy')
-        .update({
-          total_fragments: newFragments,
-          streak_shields: newShields,
-        })
-        .eq('user_id', user.id);
-
-      if (econErr) {
-        console.error('Erro ao atualizar saldo de fragmentos:', econErr);
+      try {
+        await updateEconomy(user.id, current => {
+          if ((current.total_fragments ?? 0) < item.cost) throw new Error('Fragmentos insuficientes.');
+          return { update: {
+            total_fragments: (current.total_fragments ?? 0) - item.cost,
+            streak_shields: (current.streak_shields ?? 0) + (item.shield_days || 0),
+          }, result: null };
+        });
+      } catch (error) {
+        // The redemption and payment still require a server transaction for full
+        // atomicity. Never report a failed or uncertain payment as successful.
+        console.error('Erro ao confirmar resgate:', error);
+        await fetchShopData();
+        window.dispatchEvent(new CustomEvent('streak-reward:sync'));
+        return { success: false, message: 'Não foi possível confirmar o resgate. Confira seu saldo e histórico antes de tentar novamente.' };
       }
 
       // 6. Update local state & dispatch global sync
@@ -165,7 +168,7 @@ export function useShop() {
 
       return { success: true };
     },
-    [user, economyState, redeemedItemIds]
+    [user, redeemedItemIds, fetchShopData]
   );
 
   return {

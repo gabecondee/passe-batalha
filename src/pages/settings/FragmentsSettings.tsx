@@ -5,7 +5,7 @@ import { SettingsHeader } from '@/components/settings/SettingsHeader';
 import { useStreakReward } from '@/hooks/useStreakReward';
 
 export default function FragmentsSettings() {
-  const { state } = useStreakReward();
+  const { state, ready } = useStreakReward();
   const navigate = useNavigate();
 
   const gained = state.fragment_history.reduce((s, h) => s + h.amount, 0);
@@ -25,7 +25,7 @@ export default function FragmentsSettings() {
           <Gem className="absolute right-4 bottom-4 w-24 h-24 text-primary/10" />
           <p className="text-xs uppercase tracking-wider text-muted-foreground font-display">Saldo atual</p>
           <p className="font-display text-5xl text-primary drop-shadow-[0_0_20px_hsl(var(--primary)/0.5)] mt-2">
-            {state.total_fragments.toLocaleString('pt-BR')}
+            {ready ? state.total_fragments.toLocaleString('pt-BR') : '—'}
           </p>
           <button onClick={() => navigate('/shop')} className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/50 text-primary text-sm font-display tracking-wider hover:bg-primary/10 transition-colors">
             <ShoppingBag className="w-4 h-4" /> IR PARA A LOJA

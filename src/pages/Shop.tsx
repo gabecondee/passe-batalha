@@ -10,7 +10,7 @@ import { cn } from '@/lib/utils';
 
 export default function Shop() {
   const navigate = useNavigate();
-  const { state: streakState } = useStreakReward();
+  const { state: streakState, ready: economyReady, error: economyError, refresh: refreshEconomy } = useStreakReward();
   const {
     visiblePhysicalItems,
     visibleConsumableItems,
@@ -38,7 +38,7 @@ export default function Shop() {
   );
 
   const openConfirm = (item: ShopItem) => {
-    if (streakState.total_fragments < item.cost) return;
+    if (!economyReady || economyError || streakState.total_fragments < item.cost) return;
     setConfirmItem(item);
   };
 
@@ -73,7 +73,7 @@ export default function Shop() {
   };
 
   const renderCard = (item: ShopItem, idx: number) => {
-    const canAfford = streakState.total_fragments >= item.cost;
+    const canAfford = economyReady && !economyError && streakState.total_fragments >= item.cost;
     const isGold = item.accent === 'gold';
     const redeemed = item.category === 'physical' && redeemedItemIds.has(item.id);
 
@@ -200,6 +200,7 @@ export default function Shop() {
 
   return (
     <MainLayout>
+      {economyError && <div role="alert" className="text-sm text-destructive">{economyError} <button type="button" onClick={() => void refreshEconomy()} className="underline">Tentar novamente</button></div>}
       <div className="max-w-2xl mx-auto pb-10 px-1">
         {/* Header */}
         <div className="flex items-center justify-between mb-6 pt-1">
@@ -217,7 +218,7 @@ export default function Shop() {
           <div className="flex items-center gap-2 px-3 h-11 rounded-xl border border-sky-500/40 bg-[#0a0a0a]">
             <Gem className="w-4 h-4 text-sky-400" />
             <span className="font-display text-base text-sky-300">
-              {streakState.total_fragments.toLocaleString('pt-BR')}
+              {economyReady ? streakState.total_fragments.toLocaleString('pt-BR') : '—'}
             </span>
           </div>
         </div>

@@ -43,7 +43,7 @@ export default function Inventory() {
   const navigate = useNavigate();
   const { user } = useGame();
   const { summary } = useFinances();
-  const { state: streakState } = useStreakReward();
+  const { state: streakState, ready: economyReady } = useStreakReward();
 
   const investDisplay =
     'R$ ' +
@@ -53,8 +53,8 @@ export default function Inventory() {
     });
 
   const resources = [
-    { id: 'shields', label: 'Bloqueadores', value: formatCompactNumber(streakState.streak_shields), icon: Shield, color: 'text-[#38bdf8]', border: 'border-[#38bdf8]/40' },
-    { id: 'fragments', label: 'Fragmentos', value: formatCompactNumber(streakState.total_fragments), icon: Gem, color: 'text-sky-400', border: 'border-sky-400/40' },
+    { id: 'shields', label: 'Bloqueadores', value: economyReady ? formatCompactNumber(streakState.streak_shields) : '—', icon: Shield, color: 'text-[#38bdf8]', border: 'border-[#38bdf8]/40' },
+    { id: 'fragments', label: 'Fragmentos', value: economyReady ? formatCompactNumber(streakState.total_fragments) : '—', icon: Gem, color: 'text-sky-400', border: 'border-sky-400/40' },
     { id: 'investments', label: 'Investimentos', value: formatCompactNumber(summary.totalInvestments), icon: Wallet, color: 'text-emerald-400', border: 'border-emerald-400/40' },
   ];
 

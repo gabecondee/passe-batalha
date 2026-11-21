@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { useGame } from '@/contexts/GameContext';
 import { useStreakReward, type StreakOutcome } from '@/hooks/useStreakReward';
 import { StreakRewardScreen } from './StreakRewardScreen';
+import { toast } from 'sonner';
 
 const ENERGY_DATA: Record<number, { description: string; activities: string[] }> = {
   0: {
@@ -92,21 +93,21 @@ export function EnergyCheckin() {
   const [step, setStep] = useState<'select' | 'result' | 'streak'>('select');
   const [streakOutcome, setStreakOutcome] = useState<StreakOutcome | null>(null);
   const { setEnergy } = useGame();
-  const { state: streakState, checkIn, isLoading } = useStreakReward();
+  const { state: streakState, checkIn, isLoading, error, isCheckingIn, refresh } = useStreakReward();
 
   useEffect(() => {
     emit({ type: 'ui:checkin-toggled', isOpen: open });
   }, [open]);
 
   useEffect(() => {
-    if (isLoading) return;
+    if (isLoading || error) return;
     
     const today = toISODate(new Date());
     if (streakState.last_checkin_date !== today) {
       const timer = setTimeout(() => setOpen(true), 50);
       return () => clearTimeout(timer);
     }
-  }, [isLoading, streakState.last_checkin_date]);
+  }, [isLoading, error, streakState.last_checkin_date]);
 
   const handleConfirm = () => {
     if (selected === null) return;
@@ -115,10 +116,14 @@ export function EnergyCheckin() {
     setEnergy(selected * 10);
   };
 
-  const handleGoToStreak = () => {
-    const outcome = checkIn();
-    setStreakOutcome(outcome);
-    setStep('streak');
+  const handleGoToStreak = async () => {
+    try {
+      const outcome = await checkIn();
+      setStreakOutcome(outcome);
+      setStep('streak');
+    } catch (failure) {
+      toast.error(failure instanceof Error ? failure.message : 'Não foi possível salvar o check-in. Tente novamente.');
+    }
   };
 
   const handleClose = () => {
@@ -318,11 +323,15 @@ export function EnergyCheckin() {
                       ))}
                     </div>
 
+                    {error && <div role="alert" className="text-sm text-destructive mb-3">
+                      {error} <button type="button" className="underline" onClick={() => void refresh()}>Tentar novamente</button>
+                    </div>}
                     <button
                       onClick={handleGoToStreak}
+                      disabled={isCheckingIn || isLoading || !!error}
                       className="w-full py-3 rounded-xl font-display text-sm tracking-wider bg-primary/10 border border-primary/40 text-primary hover:bg-primary/20 transition-all duration-200 flex items-center justify-center gap-2"
                     >
-                      CONTINUAR
+                      {isCheckingIn ? 'SALVANDO...' : 'REGISTRAR CHECK-IN'}
                       <ChevronRight className="w-4 h-4" />
                     </button>
                   </motion.div>

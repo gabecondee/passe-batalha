@@ -88,7 +88,8 @@ export function StreakRewardScreen({ outcome, onContinue }: StreakRewardScreenPr
           {previousStreak === 1 ? 'dia' : 'dias'}.
         </p>
         <p className="text-xs text-muted-foreground mb-6">
-          Todo herói recomeça quantas vezes forem necessárias.
+          Foram {outcome.missedDays} dias sem check-in e você tinha {state.streak_shields} escudo(s).
+          Cada escudo cobre um dia. Como não eram suficientes, seus escudos foram mantidos no inventário.
         </p>
 
         {/* Show new streak start */}
@@ -111,6 +112,9 @@ export function StreakRewardScreen({ outcome, onContinue }: StreakRewardScreenPr
 
   return (
     <div className="text-center relative overflow-hidden">
+      {outcome.shieldsUsed > 0 && <p className="relative text-sm text-sky-400 mb-3">
+        🛡️ {outcome.shieldsUsed} escudo(s) usado(s) para proteger sua sequência.
+      </p>}
       {/* Background glow */}
       <motion.div
         className="absolute inset-0 pointer-events-none"
